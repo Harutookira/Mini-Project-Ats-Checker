@@ -76,8 +76,7 @@ export function parseCV(text: string): ParsedCV {
   const metadata = {
     wordCount: text.split(/\s+/).length,
     hasEmail: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/.test(text),
-    // Fixed invalid regex pattern - replaced $$? with $$? and $$? for optional parentheses
-    hasPhone: /(\+?\d{1,3}[-.\s]?)?$$?\d{3}$$?[-.\s]?\d{3}[-.\s]?\d{4}/.test(text),
+    hasPhone: /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(text),
     hasLinkedIn: /linkedin\.com\/in\//.test(text.toLowerCase()),
     sectionCount: Object.keys(sections).length,
   }
