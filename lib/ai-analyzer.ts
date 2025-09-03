@@ -11,8 +11,41 @@ export interface AIAnalysisResult {
   improvementPriority: "high" | "medium" | "low"
 }
 
+function getFallbackAnalysis(): AIAnalysisResult {
+  return {
+    overallAssessment:
+      "CV analysis completed using standard algorithms. The document shows professional structure with opportunities for ATS optimization improvements.",
+    strengths: ["Professional presentation", "Clear structure", "Relevant experience", "Contact information included"],
+    weaknesses: [
+      "Could benefit from keyword optimization",
+      "Format improvements needed",
+      "Missing quantifiable achievements",
+    ],
+    industrySpecificAdvice: [
+      "Align with industry standards",
+      "Include relevant certifications",
+      "Research role-specific requirements",
+      "Follow best practices for your field",
+    ],
+    atsOptimizationTips: [
+      "Use standard section headers like 'Experience', 'Education', 'Skills'",
+      "Include more action verbs in experience descriptions",
+      "Add quantifiable achievements with specific numbers",
+      "Ensure consistent formatting throughout",
+      "Include relevant keywords naturally",
+    ],
+    careerLevelAssessment: "Mid-level professional",
+    improvementPriority: "medium",
+  }
+}
+
 export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
   try {
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      console.warn("Gemini AI API key not found, using fallback analysis")
+      return getFallbackAnalysis()
+    }
+
     const prompt = `
     You are an expert ATS (Applicant Tracking System) consultant and career advisor. Analyze the following CV/resume text and provide detailed insights for ATS optimization.
 
@@ -50,39 +83,32 @@ export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
       const aiResult = JSON.parse(text)
       return aiResult as AIAnalysisResult
     } catch (parseError) {
-      // Fallback if JSON parsing fails
-      return {
-        overallAssessment: "AI analysis completed. The CV shows potential for ATS optimization improvements.",
-        strengths: ["Professional presentation", "Clear structure", "Relevant experience"],
-        weaknesses: ["Could benefit from keyword optimization", "Format improvements needed"],
-        industrySpecificAdvice: ["Align with industry standards", "Include relevant certifications"],
-        atsOptimizationTips: [
-          "Use standard section headers",
-          "Include more action verbs",
-          "Add quantifiable achievements",
-        ],
-        careerLevelAssessment: "Mid-level professional",
-        improvementPriority: "medium",
-      }
+      console.warn("Failed to parse AI response, using fallback")
+      return getFallbackAnalysis()
     }
   } catch (error) {
     console.error("AI Analysis Error:", error)
-    // Return fallback analysis if AI fails
-    return {
-      overallAssessment:
-        "CV analysis completed using standard algorithms. Consider AI-powered insights for enhanced recommendations.",
-      strengths: ["Document structure maintained", "Content organization present"],
-      weaknesses: ["AI analysis unavailable", "Standard analysis limitations"],
-      industrySpecificAdvice: ["Follow industry best practices", "Research role-specific requirements"],
-      atsOptimizationTips: ["Use clear section headers", "Include relevant keywords", "Maintain consistent formatting"],
-      careerLevelAssessment: "Professional level",
-      improvementPriority: "medium",
-    }
+    return getFallbackAnalysis()
   }
+}
+
+function getFallbackSuggestions(): string[] {
+  return [
+    "Add more quantifiable achievements with specific numbers and percentages",
+    "Include industry-relevant keywords naturally throughout your experience descriptions",
+    "Use strong action verbs to start each bullet point in your experience section",
+    "Ensure consistent formatting and clear section headers for better ATS parsing",
+    "Add a professional summary that highlights your key qualifications and career goals",
+  ]
 }
 
 export async function generatePersonalizedSuggestions(cvText: string, targetRole?: string): Promise<string[]> {
   try {
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      console.warn("Gemini AI API key not found, using fallback suggestions")
+      return getFallbackSuggestions()
+    }
+
     const prompt = `
     Based on this CV content${targetRole ? ` and target role of "${targetRole}"` : ""}, provide 5 specific, actionable suggestions for improvement:
 
@@ -101,25 +127,13 @@ export async function generatePersonalizedSuggestions(cvText: string, targetRole
 
     try {
       const suggestions = JSON.parse(text)
-      return Array.isArray(suggestions) ? suggestions : []
+      return Array.isArray(suggestions) ? suggestions : getFallbackSuggestions()
     } catch {
-      // Fallback suggestions
-      return [
-        "Add more quantifiable achievements with specific numbers and percentages",
-        "Include industry-relevant keywords naturally throughout your experience descriptions",
-        "Use strong action verbs to start each bullet point in your experience section",
-        "Ensure consistent formatting and clear section headers for better ATS parsing",
-        "Add a professional summary that highlights your key qualifications and career goals",
-      ]
+      console.warn("Failed to parse AI suggestions, using fallback")
+      return getFallbackSuggestions()
     }
   } catch (error) {
     console.error("Personalized Suggestions Error:", error)
-    return [
-      "Optimize keyword usage for your target industry",
-      "Quantify achievements with specific metrics",
-      "Improve section organization and headers",
-      "Enhance professional summary section",
-      "Ensure consistent formatting throughout",
-    ]
+    return getFallbackSuggestions()
   }
 }

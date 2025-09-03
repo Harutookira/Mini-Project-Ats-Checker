@@ -66,9 +66,14 @@ export async function POST(request: NextRequest) {
     // Perform standard analysis
     const standardAnalysis = analyzeCV(extractedText)
 
+    console.log("[v0] Starting AI analysis with Gemini API")
+
     // Perform AI analysis
     const aiAnalysis = await analyzeWithAI(extractedText)
+    console.log("[v0] AI analysis completed:", aiAnalysis.overallAssessment ? "Success" : "Fallback used")
+
     const personalizedSuggestions = await generatePersonalizedSuggestions(extractedText)
+    console.log("[v0] Personalized suggestions generated:", personalizedSuggestions.length, "suggestions")
 
     return NextResponse.json({
       success: true,
