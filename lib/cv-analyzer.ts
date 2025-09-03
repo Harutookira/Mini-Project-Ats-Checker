@@ -92,7 +92,7 @@ export function parseCV(text: string): ParsedCV {
 export function analyzeParsing(parsedCV: ParsedCV): CVAnalysisResult {
   const issues: string[] = []
   const recommendations: string[] = []
-  let score = 100
+  let score = 2
 
   // Check essential contact information
   if (!parsedCV.metadata.hasEmail) {
