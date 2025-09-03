@@ -208,7 +208,7 @@ export function analyzeKeywords(parsedCV: ParsedCV, targetKeywords: string[] = [
   if (keywordDensity < 2) {
     issues.push("Low keyword density for ATS optimization")
     recommendations.push("Naturally incorporate more industry-relevant keywords")
-    score -= 15
+    score -= 1=23
   }
 
   // Check for quantifiable achievements
