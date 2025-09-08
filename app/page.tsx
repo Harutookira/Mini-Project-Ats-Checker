@@ -12,6 +12,8 @@ export default function HomePage() {
   const [file, setFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [jobName, setJobName] = useState('')
+  const [jobDescription, setJobDescription] = useState('')
   const router = useRouter()
 
   const handleFileSelect = (selectedFile: File) => {
@@ -53,6 +55,8 @@ export default function HomePage() {
     try {
       const formData = new FormData()
       formData.append("file", file)
+      formData.append("jobName", jobName)
+      formData.append("jobDescription", jobDescription)
 
       const response = await fetch("/api/analyze-cv", {
         method: "POST",
@@ -76,6 +80,10 @@ export default function HomePage() {
           uploadTime: new Date().toISOString(),
         }),
       )
+      localStorage.setItem("jobInfo", JSON.stringify({
+        jobName,
+        jobDescription
+      }))
 
       router.push("/results")
     } catch (error) {
@@ -111,6 +119,41 @@ export default function HomePage() {
             <p className="text-lg text-muted-foreground">
               Upload your CV and get detailed analysis on parsing, keywords, formatting, and readability
             </p>
+          </div>
+
+          {/* Job Information Form */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg text-primary">Job Name</CardTitle>
+                <CardDescription>Enter the position you're applying for</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <input
+                  type="text"
+                  value={jobName}
+                  onChange={(e) => setJobName(e.target.value)}
+                  placeholder="e.g., Frontend Developer, Data Analyst, Marketing Manager"
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg text-primary">Job Description</CardTitle>
+                <CardDescription>Enter key requirements and responsibilities</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Paste key requirements, skills, and responsibilities from the job posting..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </CardContent>
+            </Card>
           </div>
 
           <Card className="border-2 border-dashed border-primary/20 hover:border-primary/40 transition-colors">

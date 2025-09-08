@@ -19,14 +19,105 @@ import {
   Lightbulb,
   Award,
   BarChart3,
+  Calendar,
+  HardDrive,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  Loader2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { generateAnimalFacts, puterQuickstart } from "@/lib/ai-analyzer"
+
+// Text analysis interfaces and functions
+interface TextAnalysis {
+  totalWords: number
+  uniqueWords: number
+  sentences: number
+  avgWordsPerSentence: number
+  lexicalDiversity: number
+  topWords: [string, number][]
+}
+
+// Parse words from text
+function parseWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-zA-Z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 3 && !isStopWord(word))
+}
+
+// Check if word is a stop word
+function isStopWord(word: string): boolean {
+  const stopWords = new Set([
+    'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+    'from', 'up', 'about', 'into', 'through', 'during', 'before', 'after',
+    'above', 'below', 'between', 'among', 'under', 'over', 'this', 'that',
+    'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him',
+    'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'am',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+    'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+    'must', 'can', 'shall', 'a', 'an', 'dan', 'atau', 'yang', 'dengan', 'untuk',
+    'dari', 'dalam', 'pada', 'akan', 'dapat', 'harus', 'juga', 'ini', 'itu'
+  ])
+  return stopWords.has(word)
+}
+
+// Get word frequency
+function getWordFrequency(words: string[]): Map<string, number> {
+  const frequency = new Map<string, number>()
+  words.forEach(word => {
+    frequency.set(word, (frequency.get(word) || 0) + 1)
+  })
+  return frequency
+}
+
+// Get top words
+function getTopWords(frequency: Map<string, number>, limit: number = 20): [string, number][] {
+  return Array.from(frequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+}
+
+// Analyze text and return statistics
+function analyzeText(text: string): TextAnalysis | null {
+  if (!text || text.trim().length === 0) {
+    return null
+  }
+
+  const words = parseWords(text)
+  const frequency = getWordFrequency(words)
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0)
+  
+  const totalWords = words.length
+  const uniqueWords = frequency.size
+  const sentenceCount = sentences.length
+  const avgWordsPerSentence = sentenceCount > 0 ? Math.round(totalWords / sentenceCount) : 0
+  const lexicalDiversity = totalWords > 0 ? Math.round((uniqueWords / totalWords) * 100) : 0
+  const topWords = getTopWords(frequency, 20)
+
+  return {
+    totalWords,
+    uniqueWords,
+    sentences: sentenceCount,
+    avgWordsPerSentence,
+    lexicalDiversity,
+    topWords
+  }
+}
 
 interface CVData {
   name: string
   size: number
   type: string
   uploadTime: string
+}
+
+interface JobData {
+  jobName: string
+  jobDescription: string
 }
 
 interface AnalysisResult {
@@ -83,17 +174,35 @@ interface CVAnalysis {
   comprehensiveScore?: ComprehensiveScore
   industry?: string
   rankingInsights?: string[]
+  extractedText?: string
+  parsedSections?: {
+    contact?: string
+    summary?: string
+    experience?: string
+    education?: string
+    skills?: string
+  }
 }
 
 export default function ResultsPage() {
   const [cvData, setCvData] = useState<CVData | null>(null)
+  const [jobData, setJobData] = useState<JobData | null>(null)
   const [analysis, setAnalysis] = useState<CVAnalysis | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showPreview, setShowPreview] = useState(false)
+  const [animalFacts, setAnimalFacts] = useState<string[]>([])
+  const [isLoadingFacts, setIsLoadingFacts] = useState(false)
+  const [showAITest, setShowAITest] = useState(false)
+  const [puterResult, setPuterResult] = useState<string>('')
+  const [isLoadingPuter, setIsLoadingPuter] = useState(false)
+  const [showPuter, setShowPuter] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState<string>('')
   const router = useRouter()
 
   useEffect(() => {
     const storedData = localStorage.getItem("uploadedCV")
     const storedAnalysis = localStorage.getItem("cvAnalysis")
+    const storedJobInfo = localStorage.getItem("jobInfo")
 
     if (!storedData || !storedAnalysis) {
       router.push("/")
@@ -102,8 +211,81 @@ export default function ResultsPage() {
 
     setCvData(JSON.parse(storedData))
     setAnalysis(JSON.parse(storedAnalysis))
+    if (storedJobInfo) {
+      setJobData(JSON.parse(storedJobInfo))
+    }
     setIsLoading(false)
   }, [router])
+
+  const handleGenerateAnimalFacts = async () => {
+    setIsLoadingFacts(true)
+    try {
+      const facts = await generateAnimalFacts()
+      setAnimalFacts(facts)
+      setShowAITest(true)
+    } catch (error) {
+      console.error('Error generating animal facts:', error)
+      // Show error message instead of fallback facts
+      setAnimalFacts(["❌ Failed to generate animal facts. Please check AI integration."])
+      setShowAITest(true)
+    } finally {
+      setIsLoadingFacts(false)
+    }
+  }
+
+  const handlePuterQuickstart = async () => {
+    setIsLoadingPuter(true)
+    try {
+      // Build the prompt in parts to avoid template literal nesting issues
+      let prompt = customPrompt
+      
+      if (!customPrompt) {
+        // Base prompt
+        prompt = `Kamu adalah seorang HRD yang melakukan pengecekan terhadap CV ATS. Analisis CV berikut:\n\n${analysis?.extractedText || 'CV text not available'}\n\n`
+        
+        // Add job information if available
+        if (jobData) {
+          prompt += `DENGAN MEMBANDINGKAN TERHADAP POSISI TARGET:\n- Nama Pekerjaan: ${jobData.jobName}\n- Deskripsi Pekerjaan: ${jobData.jobDescription}\n\nPASTIKAN analisis KATA KUNCI SESUAI JOB menggunakan perbandingan DETAIL dengan job description di atas.\n\n`
+        }
+        
+        // Add main analysis instructions
+        prompt += `Lakukan analisis mendalam terhadap 4 kategori berikut dengan memberikan SKOR untuk masing-masing kategori dan SKOR TOTAL:\n\n1. **Dampak Kuantitatif** (25% bobot):\n   - Apakah CV menunjukkan pencapaian yang terukur?\n   - Adakah angka, persentase, atau metrik spesifik?\n   - Relevansi pengalaman dengan posisi target?\n\n2. **Panjang CV** (20% bobot):\n   - Apakah panjang CV optimal (200-600 kata)?\n   - Penggunaan bahasa baku dan formal?\n   - Keseimbangan informasi dengan pengalaman?\n\n3. **Kelengkapan CV** (30% bobot):\n   - Informasi kontak lengkap (email, telepon)?\n   - Struktur CV terorganisir (summary, experience, education, skills)?\n   - Format profesional dan rapi?\n\n4. **Kata Kunci Sesuai Job** (25% bobot):\n`
+        
+        // Add job-specific keyword analysis if job data is available
+        if (jobData) {
+          prompt += `   - BANDINGKAN CV dengan job description "${jobData.jobDescription}" secara detail\n   - Hitung persentase kata kunci yang cocok (contoh: 15 dari 25 kata kunci = 60%)\n   - Analisis technical skills yang sesuai dengan posisi "${jobData.jobName}"\n   - Periksa action verbs yang relevan dengan requirement job\n\n`
+        } else {
+          prompt += `   - Penggunaan keywords yang relevan dengan industri?\n   - Technical skills sesuai bidang pekerjaan?\n   - Action verbs yang tepat?\n\n`
+        }
+        
+        // Add output format instructions
+        prompt += `Berikan hasil dalam format yang MUDAH DIBACA dengan:\n\n📊 **SKOR KATEGORI:**\n• Dampak Kuantitatif: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Panjang CV: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Kelengkapan CV: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Kata Kunci Job: [X]/100 (Status: [excellent/good/needs-improvement/poor])`
+        
+        // Add job match percentage if job data available
+        if (jobData) {
+          prompt += ` - Tingkat kesesuaian: [X]% keyword cocok`
+        }
+        
+        prompt += `\n\n🎯 **SKOR TOTAL: [X]/100** (Grade: A+/A/B/C/D/F)\n\n❌ **MASALAH UTAMA:**\n[List 3-5 masalah prioritas]\n\n✅ **REKOMENDASI PERBAIKAN:**\n[List 3-5 saran actionable]\n\n💡 **KESIMPULAN:**\n[Penjelasan singkat dan saran prioritas utama]`
+      }
+      console.log("[UI] Testing Puter with prompt:", prompt)
+      
+      // Use the robust puterQuickstart function from ai-analyzer
+      console.log("[UI] Calling puterQuickstart function...")
+      const result = await puterQuickstart(prompt)
+      console.log("[UI] Received result:", result)
+      
+      setPuterResult(result)
+      setShowPuter(true)
+    } catch (error) {
+      console.error('Error with Puter quickstart:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Wait for Puter.js to fully load\n• Check browser console for errors\n• Ensure you're logged in to Puter.com`)
+      setShowPuter(true)
+    } finally {
+      setIsLoadingPuter(false)
+    }
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -137,14 +319,20 @@ export default function ResultsPage() {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case "Dampak Kuantitatif":
+        return <TrendingUp className="w-5 h-5" />
+      case "Panjang CV":
+        return <FileText className="w-5 h-5" />
+      case "Ringkasan Bullet Point":
+        return <Target className="w-5 h-5" />
+      case "Kelengkapan CV":
+        return <CheckCircle className="w-5 h-5" />
+      case "Kata Kunci Sesuai Job":
+        return <Search className="w-5 h-5" />
       case "CV Parsing":
         return <Eye className="w-5 h-5" />
       case "Keyword Matching":
         return <Search className="w-5 h-5" />
-      case "Scoring & Ranking":
-        return <TrendingUp className="w-5 h-5" />
-      case "Format & Readability":
-        return <Target className="w-5 h-5" />
       default:
         return <FileText className="w-5 h-5" />
     }
@@ -162,6 +350,34 @@ export default function ResultsPage() {
         return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getFileTypeIcon = (type: string) => {
+    if (type.includes('pdf')) return '📄'
+    if (type.includes('word') || type.includes('doc')) return '📝'
+    if (type.includes('text')) return '📃'
+    return '📄'
+  }
+
+
 
   const getGradeColor = (grade: string) => {
     if (grade.startsWith("A")) return "bg-green-100 text-green-800 border-green-200"
@@ -235,13 +451,346 @@ export default function ResultsPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* Document Preview */}
+        {cvData && (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">{getFileTypeIcon(cvData.type)}</span>
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-xl text-primary">Uploaded Document</CardTitle>
+                  <CardDescription>Document details and information</CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  Successfully Analyzed
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                  <FileText className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground truncate max-w-[200px]" title={cvData.name}>
+                      {cvData.name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">File Name</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                  <HardDrive className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">{formatFileSize(cvData.size)}</p>
+                    <p className="text-sm text-muted-foreground">File Size</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                  <Eye className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {cvData.type.split('/')[1]?.toUpperCase() || 'DOC'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">File Type</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground text-sm">
+                      {formatDate(cvData.uploadTime)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Upload Time</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  📊 AI Analysis Complete
+                </Badge>
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  ✅ ATS Compatible Format
+                </Badge>
+                {analysis?.industry && (
+                  <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                    🏢 {analysis.industry.charAt(0).toUpperCase() + analysis.industry.slice(1)} Industry
+                  </Badge>
+                )}
+                {analysis?.aiInsights?.careerLevelAssessment && (
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                    🎯 {analysis.aiInsights.careerLevelAssessment}
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Job Information */}
+        {jobData && (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
+                  <Target className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-xl text-primary">Target Job Information</CardTitle>
+                  <CardDescription>Position and requirements for ATS analysis</CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  Job Matched
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-100">
+                    <Target className="w-5 h-5 text-green-600" />
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">Job Position</p>
+                      <p className="text-sm text-muted-foreground">{jobData.jobName}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                      <p className="font-medium text-foreground">Job Description</p>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {jobData.jobDescription.length > 300 
+                          ? `${jobData.jobDescription.substring(0, 300)}...` 
+                          : jobData.jobDescription}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                  🎯 Position: {jobData.jobName}
+                </Badge>
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  📝 Description Provided
+                </Badge>
+                <Badge variant="secondary" className="bg-purple-100 text-purple-800">
+                  🔍 Keyword Analysis Active
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Document Preview - Simplified */}
+        {analysis?.extractedText && (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center">
+                    <Eye className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl text-primary">Document Preview</CardTitle>
+                    <CardDescription>Content extracted from your uploaded document</CardDescription>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center gap-2"
+                >
+                  {showPreview ? (
+                    <>
+                      <ChevronDown className="w-4 h-4" />
+                      Hide Preview
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="w-4 h-4" />
+                      Show Preview
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            {showPreview && (
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Full Document Content Only */}
+                  <div className="bg-muted p-6 rounded-lg border-2 border-dashed border-muted-foreground/20">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">
+                        Full Document Content:
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        {analysis.metadata.wordCount} words
+                      </Badge>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap text-sm text-foreground font-mono leading-relaxed">
+                        {analysis.extractedText}
+                      </pre>
+                    </div>
+                  </div>
+
+                  {/* Preview Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-background rounded-lg border">
+                      <div className="text-lg font-semibold text-foreground">
+                        {analysis.metadata.wordCount}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Words</div>
+                    </div>
+                    <div className="text-center p-3 bg-background rounded-lg border">
+                      <div className="text-lg font-semibold text-foreground">
+                        {analysis.extractedText.split('\n').filter(line => line.trim().length > 0).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Lines</div>
+                    </div>
+                    <div className="text-center p-3 bg-background rounded-lg border">
+                      <div className="text-lg font-semibold text-foreground">
+                        {analysis.extractedText.length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Characters</div>
+                    </div>
+                    <div className="text-center p-3 bg-background rounded-lg border">
+                      <div className="text-lg font-semibold text-foreground">
+                        {Object.keys(analysis.parsedSections || {}).length}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Sections</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* Text Analysis */}
+        {analysis?.extractedText && (
+          <Card className="mb-8">
+            <CardContent>
+              {(() => {
+                const textAnalysis = analyzeText(analysis.extractedText || '')
+                if (!textAnalysis) return null
+                
+                return (
+                  <div className="space-y-6">
+                    {/* Overall Statistics */}
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                        📊 Text Statistics
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <div className="text-center p-4 bg-blue-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-blue-600">{textAnalysis.totalWords}</div>
+                          <div className="text-sm text-muted-foreground">Total Words</div>
+                        </div>
+                        <div className="text-center p-4 bg-green-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-green-600">{textAnalysis.uniqueWords}</div>
+                          <div className="text-sm text-muted-foreground">Unique Words</div>
+                        </div>
+                        <div className="text-center p-4 bg-purple-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-purple-600">{textAnalysis.sentences}</div>
+                          <div className="text-sm text-muted-foreground">Sentences</div>
+                        </div>
+                        <div className="text-center p-4 bg-orange-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-orange-600">{textAnalysis.avgWordsPerSentence}</div>
+                          <div className="text-sm text-muted-foreground">Avg Words/Sentence</div>
+                        </div>
+                        <div className="text-center p-4 bg-red-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-red-600">{textAnalysis.lexicalDiversity}%</div>
+                          <div className="text-sm text-muted-foreground">Lexical Diversity</div>
+                        </div>
+                        <div className="text-center p-4 bg-indigo-50 rounded-lg border">
+                          <div className="text-2xl font-bold text-indigo-600">{analysis.extractedText.length}</div>
+                          <div className="text-sm text-muted-foreground">Characters</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Keywords */}
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                        🏆 Most Frequent Keywords
+                      </h4>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <div className="space-y-2">
+                            {textAnalysis.topWords.slice(0, 10).map(([word, count], index) => (
+                              <div key={word} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-xs font-bold text-primary-foreground">
+                                    {index + 1}
+                                  </div>
+                                  <span className="font-medium text-foreground">{word}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-primary h-2 rounded-full" 
+                                      style={{width: `${(count / textAnalysis.topWords[0][1]) * 100}%`}}
+                                    ></div>
+                                  </div>
+                                  <Badge variant="secondary">{count}</Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="space-y-2">
+                            {textAnalysis.topWords.slice(10, 20).map(([word, count], index) => (
+                              <div key={word} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-6 h-6 bg-secondary rounded-full flex items-center justify-center text-xs font-bold text-secondary-foreground">
+                                    {index + 11}
+                                  </div>
+                                  <span className="font-medium text-foreground">{word}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-secondary h-2 rounded-full" 
+                                      style={{width: `${(count / textAnalysis.topWords[0][1]) * 100}%`}}
+                                    ></div>
+                                  </div>
+                                  <Badge variant="outline">{count}</Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Overall Score */}
         <Card className="mb-8">
+
           <CardHeader>
-            <CardTitle className="text-2xl text-primary">Overall ATS Compatibility Score</CardTitle>
+            <CardTitle className="text-2xl text-primary">Penilaian CV ATS Checker</CardTitle>
             <CardDescription>
-              Based on AI analysis of parsing, keywords, scoring, and formatting
-              {analysis.industry && ` • Industry: ${analysis.industry}`}
+              Berdasarkan 4 kriteria: Dampak Kuantitatif, Panjang CV, Kelengkapan CV, dan Kata Kunci Job
+              {jobData && ` • Target: ${jobData.jobName}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -271,7 +820,7 @@ export default function ResultsPage() {
               <div className="flex-1">
                 <Progress value={analysis.overallScore} className="h-3" />
                 <p className="text-sm text-muted-foreground mt-2">
-                  Your CV scores {analysis.overallScore}% for ATS compatibility
+                  CV Anda mendapat skor {analysis.overallScore}% berdasarkan kriteria penilaian ATS
                 </p>
               </div>
             </div>
@@ -303,101 +852,10 @@ export default function ResultsPage() {
               </div>
             </div>
           </CardContent>
+
         </Card>
 
-        {/* Comprehensive Scoring & Ranking */}
-        {analysis.comprehensiveScore && (
-          <Card className="mb-8">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Award className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl text-primary">Industry Ranking & Competitive Analysis</CardTitle>
-                  <CardDescription>
-                    Weighted score: {analysis.comprehensiveScore.weightedScore}% • Grade:{" "}
-                    {analysis.comprehensiveScore.overallGrade} •{analysis.comprehensiveScore.industryPercentile}th
-                    percentile
-                  </CardDescription>
-                </div>
-                <Badge className={getGradeColor(analysis.comprehensiveScore.overallGrade)}>
-                  {analysis.comprehensiveScore.overallGrade}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Competitive Position */}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold text-primary mb-1">
-                    {analysis.comprehensiveScore.competitiveAnalysis.marketPosition}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Market Position</div>
-                </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold text-primary mb-1">
-                    {analysis.comprehensiveScore.competitiveAnalysis.vsAverageCandidate > 0 ? "+" : ""}
-                    {analysis.comprehensiveScore.competitiveAnalysis.vsAverageCandidate}
-                  </div>
-                  <div className="text-sm text-muted-foreground">vs Average Candidate</div>
-                </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold text-primary mb-1">
-                    +{analysis.comprehensiveScore.improvementPotential}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Improvement Potential</div>
-                </div>
-              </div>
 
-              {/* Score Breakdown */}
-              <div>
-                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-primary" />
-                  Weighted Score Breakdown
-                </h4>
-                <div className="space-y-3">
-                  {analysis.comprehensiveScore.breakdown.map((item, index) => (
-                    <div key={index} className="flex items-center gap-4">
-                      <div className="w-32 text-sm font-medium text-foreground">{item.category}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Progress value={item.rawScore} className="h-2 flex-1" />
-                          <span className="text-sm font-medium text-foreground w-12">{item.rawScore}%</span>
-                          <Badge className={getGradeColor(item.grade)} variant="outline">
-                            {item.grade}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Weight: {Math.round(item.weight * 100)}% •{item.percentile}th percentile • Weighted:{" "}
-                          {Math.round(item.weightedScore)}pts
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Ranking Insights */}
-              {analysis.rankingInsights && (
-                <div>
-                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                    Competitive Insights
-                  </h4>
-                  <ul className="space-y-2">
-                    {analysis.rankingInsights.map((insight, index) => (
-                      <li key={index} className="flex items-start gap-2 text-muted-foreground">
-                        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* AI Insights */}
         {analysis.aiInsights && (
@@ -578,6 +1036,441 @@ export default function ResultsPage() {
           >
             Download Report
           </Button>
+        </div>
+
+        {/* AI Enhancement Notice - Moved below Download Report */}
+        <div className="mt-8">
+          <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Brain className="w-6 h-6 text-blue-600" />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <h3 className="font-semibold text-lg text-blue-900">Ingin Analisis dengan AI?</h3>
+                  <p className="text-blue-800 leading-relaxed">
+                    Analisis di atas menggunakan algoritma tradisional yang cepat dan akurat. 
+                    Untuk mendapatkan <strong>analisis berbasis AI dengan Puter.js</strong>, 
+                    gunakan demo interaktif di bawah ini yang dapat menganalisis CV Anda dengan GPT-4o.
+                  </p>
+                  <div className="flex items-center gap-2 text-sm text-blue-700">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Gratis menggunakan Puter.js</span>
+                    <span>•</span>
+                    <span>AI Model: GPT-4o</span>
+                    <span>•</span>
+                    <span>Analisis dalam Bahasa Indonesia</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Puter AI Quickstart Section */}
+        <div className="mt-12">
+          <Card className="border-2 border-dashed border-primary/20 bg-gradient-to-r from-primary/5 to-blue-50">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-r from-primary to-blue-600 rounded-lg flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-xl text-primary flex items-center gap-2">
+                    Analisis CV dengan Puter AI
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                      Skor Detail • GPT-4o
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Gunakan Puter.js AI untuk menganalisis CV dengan teknologi GPT-4o. 
+                    Dapatkan skor individual per kategori, skor total, grade, dan rekomendasi yang mudah dibaca.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Interactive Demo */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                        <label className="text-sm font-medium text-foreground">
+                          Test Puter AI untuk Analisis CV
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        placeholder="Masukkan teks CV Anda untuk analisis mendalam dengan skor per kategori dan total skor..."
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-4 items-start">
+                      <div className="flex-1">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          AI akan menganalisis CV dengan memberikan <strong>skor individual</strong> untuk 4 kategori dan <strong>skor total</strong>: Dampak Kuantitatif, Panjang CV, Kelengkapan CV, dan Kata Kunci Job.
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Brain className="w-4 h-4" />
+                          <span>Model: gpt-4o</span>
+                          <span>•</span>
+                          <span>SDK: Puter.js</span>
+                          <span>•</span>
+                          <span>Cost: Free</span>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handlePuterQuickstart}
+                        disabled={isLoadingPuter}
+                        className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white shadow-lg min-w-[140px]"
+                        size="lg"
+                      >
+                        {isLoadingPuter ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Test Puter AI
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Puter Result Display */}
+                {showPuter && puterResult && (
+                  <div className="bg-white rounded-lg border border-primary/20 shadow-sm animate-in slide-in-from-top-2 duration-300">
+                    {(typeof puterResult === 'string' && (
+                      puterResult.includes("❌ Puter.js") || 
+                      puterResult.includes("❌ AI Error") ||
+                      puterResult.includes("❌ Network") ||
+                      puterResult.includes("Connection Error") ||
+                      puterResult.includes("Authentication") ||
+                      puterResult.startsWith("❌")
+                    ) && !puterResult.includes("📊")) ? (
+                      // Error state
+                      <>
+                        <div className="p-6">
+                          <div className="flex items-center gap-2 mb-4">
+                            <XCircle className="w-5 h-5 text-red-600" />
+                            <h3 className="font-semibold text-foreground">AI Connection Error</h3>
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                              ❌ Failed
+                            </Badge>
+                          </div>
+                          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                            <p className="text-red-800 font-mono text-sm">{puterResult}</p>
+                            <div className="mt-3 text-xs text-red-600 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-1 h-1 rounded-full bg-red-500"></div>
+                                <span>Check that Puter.js script is loaded in HTML</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-1 h-1 rounded-full bg-red-500"></div>
+                                <span>Verify network connectivity</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-1 h-1 rounded-full bg-red-500"></div>
+                                <span>User authentication may be required</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      // Success state with enhanced readability
+                      <>
+                        <div className="p-6">
+                          <div className="flex items-center gap-2 mb-6">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <h3 className="font-semibold text-foreground text-lg">Hasil Analisis CV dengan Puter AI</h3>
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                              ✅ GPT-4o
+                            </Badge>
+                          </div>
+                          
+                          {(() => {
+                            // Enhanced parsing and formatting for better readability
+                            const formatAIResponse = (response: string) => {
+                              // Clean up the response and remove any leading error prefixes
+                              let cleanResponse = response.trim()
+                              
+                              // If response starts with error indicators but contains analysis, extract the analysis part
+                              if (cleanResponse.includes('📊')) {
+                                const analysisStart = cleanResponse.indexOf('📊')
+                                if (analysisStart > 0) {
+                                  cleanResponse = cleanResponse.substring(analysisStart)
+                                }
+                              }
+                              
+                              // Parse different sections based on common patterns
+                              const sections: any = {
+                                scores: [],
+                                totalScore: null,
+                                issues: [],
+                                recommendations: [],
+                                conclusion: null,
+                                rawContent: cleanResponse
+                              }
+                              
+                              // Extract scores if they follow the emoji pattern
+                              const scoreMatches = cleanResponse.match(/📊\s*\*\*SKOR KATEGORI:\*\*([\s\S]*?)(?=🎯|$)/)
+                              if (scoreMatches) {
+                                const scoreSection = scoreMatches[1]
+                                const scoreLines = scoreSection.split('\n').filter(line => line.trim().includes(':'))
+                                scoreLines.forEach(line => {
+                                  const match = line.match(/•\s*(.+?):\s*(\d+)\/100.*?Status:\s*\[(.+?)\]/)
+                                  if (match) {
+                                    sections.scores.push({
+                                      category: match[1].trim(),
+                                      score: parseInt(match[2]),
+                                      status: match[3].trim()
+                                    })
+                                  }
+                                })
+                              } else {
+                                // Try alternative format: • **Category: score/100** (Status: status)
+                                const altScorePattern = /•\s*\*\*(.+?):\s*(\d+)\/100\*\*\s*\(Status:\s*([^)]+)\)/g
+                                let altMatch
+                                while ((altMatch = altScorePattern.exec(cleanResponse)) !== null) {
+                                  sections.scores.push({
+                                    category: altMatch[1].trim(),
+                                    score: parseInt(altMatch[2]),
+                                    status: altMatch[3].trim()
+                                  })
+                                }
+                              }
+                              
+                              // Extract total score
+                              const totalMatch = cleanResponse.match(/🎯\s*\*\*SKOR TOTAL:\s*(\d+)\/100\*\*.*?Grade:\s*([A-F][+\-]?)/)
+                              if (totalMatch) {
+                                sections.totalScore = {
+                                  score: parseInt(totalMatch[1]),
+                                  grade: totalMatch[2]
+                                }
+                              } else {
+                                // Alternative format: 🎯 **SKOR TOTAL: X/100** (Grade: Y)
+                                const altTotalMatch = cleanResponse.match(/🎯\s*\*\*SKOR TOTAL:\s*(\d+)\/100\*\*\s*\(Grade:\s*([A-F][+\-]?)\)/)
+                                if (altTotalMatch) {
+                                  sections.totalScore = {
+                                    score: parseInt(altTotalMatch[1]),
+                                    grade: altTotalMatch[2]
+                                  }
+                                }
+                              }
+                              
+                              // Extract issues
+                              const issueMatch = cleanResponse.match(/❌\s*\*\*MASALAH UTAMA:\*\*([\s\S]*?)(?=✅|$)/)
+                              if (issueMatch) {
+                                const issueText = issueMatch[1]
+                                sections.issues = issueText.split('\n')
+                                  .filter(line => line.trim() && (line.includes('-') || line.includes('•') || /^\d+\./.test(line.trim())))
+                                  .map(line => line.replace(/^[\d\.\-•\s]+/, '').trim())
+                                  .filter(line => line.length > 5)
+                              }
+                              
+                              // Extract recommendations
+                              const recMatch = cleanResponse.match(/✅\s*\*\*REKOMENDASI PERBAIKAN:\*\*([\s\S]*?)(?=💡|$)/)
+                              if (recMatch) {
+                                const recText = recMatch[1]
+                                sections.recommendations = recText.split('\n')
+                                  .filter(line => line.trim() && (line.includes('-') || line.includes('•') || /^\d+\./.test(line.trim())))
+                                  .map(line => line.replace(/^[\d\.\-•\s]+/, '').trim())
+                                  .filter(line => line.length > 5)
+                              }
+                              
+                              // Extract conclusion
+                              const conclusionMatch = cleanResponse.match(/💡\s*\*\*KESIMPULAN:\*\*([\s\S]*?)$/)
+                              if (conclusionMatch) {
+                                sections.conclusion = conclusionMatch[1].trim()
+                              }
+                              
+                              return sections
+                            }
+                            
+                            const parsedResponse = formatAIResponse(puterResult)
+                            
+                            return (
+                              <div className="space-y-6">
+                                {/* Scores Section */}
+                                {parsedResponse.scores.length > 0 && (
+                                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                                    <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                                      📊 Skor per Kategori
+                                    </h4>
+                                    <div className="grid md:grid-cols-2 gap-3">
+                                      {parsedResponse.scores.map((score: any, index: number) => (
+                                        <div key={index} className="bg-white p-3 rounded-lg border shadow-sm">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="font-medium text-foreground text-sm">{score.category}</span>
+                                            <div className="flex items-center gap-2">
+                                              <Badge className={(() => {
+                                                const statusClasses: Record<string, string> = {
+                                                  'excellent': 'bg-green-100 text-green-800 border-green-200',
+                                                  'good': 'bg-blue-100 text-blue-800 border-blue-200',
+                                                  'needs-improvement': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                                                  'poor': 'bg-red-100 text-red-800 border-red-200'
+                                                }
+                                                return statusClasses[score.status] || 'bg-gray-100 text-gray-800'
+                                              })()}>
+                                                {score.status}
+                                              </Badge>
+                                              {score.category.includes('Kata Kunci') && jobData && (
+                                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                                                  vs Job Desc
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                              <div 
+                                                className={`h-2 rounded-full ${
+                                                  score.score >= 85 ? 'bg-green-500' :
+                                                  score.score >= 70 ? 'bg-blue-500' :
+                                                  score.score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                                }`}
+                                                style={{width: `${score.score}%`}}
+                                              ></div>
+                                            </div>
+                                            <span className="text-lg font-bold text-foreground">{score.score}/100</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Total Score */}
+                                {parsedResponse.totalScore && (
+                                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                                    <div className="flex items-center justify-center gap-4">
+                                      <div className="text-center">
+                                        <div className="text-3xl font-bold text-green-600 mb-1">🎯 {parsedResponse.totalScore.score}/100</div>
+                                        <Badge className="bg-green-100 text-green-800 border-green-200 text-lg px-3 py-1">
+                                          Grade: {parsedResponse.totalScore.grade}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Issues and Recommendations */}
+                                <div className="grid md:grid-cols-2 gap-4">
+                                  {/* Issues */}
+                                  {parsedResponse.issues.length > 0 && (
+                                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                                      <h4 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
+                                        ❌ Masalah Utama
+                                      </h4>
+                                      <ul className="space-y-2">
+                                        {parsedResponse.issues.slice(0, 5).map((issue: string, index: number) => (
+                                          <li key={index} className="flex items-start gap-2 text-red-700 text-sm">
+                                            <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-2 flex-shrink-0" />
+                                            {issue}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Recommendations */}
+                                  {parsedResponse.recommendations.length > 0 && (
+                                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                                      <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                                        ✅ Rekomendasi Perbaikan
+                                      </h4>
+                                      <ul className="space-y-2">
+                                        {parsedResponse.recommendations.slice(0, 5).map((rec: string, index: number) => (
+                                          <li key={index} className="flex items-start gap-2 text-green-700 text-sm">
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+                                            {rec}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Conclusion */}
+                                {parsedResponse.conclusion && (
+                                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                    <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                                      💡 Kesimpulan
+                                    </h4>
+                                    <p className="text-blue-700 leading-relaxed">{parsedResponse.conclusion}</p>
+                                  </div>
+                                )}
+                                
+                                {/* Fallback: Raw Response if parsing fails */}
+                                {parsedResponse.scores.length === 0 && !parsedResponse.totalScore && (
+                                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                      <h4 className="font-medium text-foreground text-sm">Hasil Analisis AI:</h4>
+                                    </div>
+                                    <div className="bg-white p-3 rounded border border-gray-200">
+                                      <div className="text-foreground leading-relaxed whitespace-pre-wrap text-sm">
+                                        {puterResult}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                          
+                          {/* Technical Details */}
+                          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border">
+                              <Brain className="w-4 h-4 text-blue-600" />
+                              <div>
+                                <div className="font-medium text-foreground">AI Model</div>
+                                <div className="text-muted-foreground text-xs">GPT-4o via Puter</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border">
+                              <Target className="w-4 h-4 text-green-600" />
+                              <div>
+                                <div className="font-medium text-foreground">Analysis Type</div>
+                                <div className="text-muted-foreground text-xs">4 Kategori HRD</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border">
+                              <Lightbulb className="w-4 h-4 text-purple-600" />
+                              <div>
+                                <div className="font-medium text-foreground">Cost</div>
+                                <div className="text-muted-foreground text-xs">Free with Puter</div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Success Status */}
+                          <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-center gap-2 text-sm text-green-800">
+                              <CheckCircle className="w-4 h-4" />
+                              <span>
+                                <strong>Status Integrasi:</strong> Puter.js AI berhasil memberikan analisis CV dengan format yang mudah dibaca!
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>
