@@ -9,7 +9,11 @@ export async function POST(request: NextRequest) {
     // Check if API key is available
     if (!process.env.GOOGLE_API_KEY) {
       console.error("GOOGLE_API_KEY is not set in environment variables");
-      return NextResponse.json({ error: "AI service is not properly configured" }, { status: 500 });
+      return NextResponse.json({ 
+        error: "AI service is not properly configured",
+        details: "The GOOGLE_API_KEY environment variable is not set. This is required for Gemini AI to function.",
+        solution: "Please add the GOOGLE_API_KEY environment variable to your Vercel project settings with your Gemini API key."
+      }, { status: 500 });
     }
 
     const { cvText, jobName, jobDescription, customPrompt } = await request.json();
@@ -54,6 +58,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("AI Analysis API Error:", error);
-    return NextResponse.json({ error: "Failed to get AI analysis" }, { status: 500 });
+    // Provide more detailed error information
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    return NextResponse.json({ 
+      error: "Failed to get AI analysis",
+      details: errorMessage,
+      stack: errorStack,
+      solution: "Please check your environment variables and ensure your GOOGLE_API_KEY is correctly set in Vercel."
+    }, { status: 500 });
   }
 }

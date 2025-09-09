@@ -292,12 +292,17 @@ export default function ResultsPage() {
         }),
       });
       
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        const errorMessage = responseData.error || "Unknown error";
+        const errorDetails = responseData.details || "";
+        const solution = responseData.solution || "";
+        
+        throw new Error(`${errorMessage}${errorDetails ? `: ${errorDetails}` : ''}${solution ? `\n\nSolution: ${solution}` : ''}`);
       }
       
-      const data = await response.json();
-      const result = data.result || "No response from AI";
+      const result = responseData.result || "No response from AI";
       
       console.log("[UI] Received result:", result);
       
@@ -323,7 +328,7 @@ export default function ResultsPage() {
         console.error('Non-Error object caught:', error);
       }
       
-      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Check your internet connection\n• Ensure the API server is running\n• Check browser console for errors`);
+      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Check your internet connection\n• Ensure the API server is running\n• Check browser console for errors\n• Verify that the GOOGLE_API_KEY environment variable is set in your Vercel deployment settings`);
       setShowPuter(true);
     } finally {
       setIsLoadingPuter(false);
