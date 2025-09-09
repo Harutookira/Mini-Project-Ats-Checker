@@ -1,4 +1,5 @@
 // Hybrid AI implementation - Puter.js (client-side) with traditional fallback
+// Added Gemini AI integration using @ai-sdk/google
 
 // Declare puter as a global variable to satisfy TypeScript
 declare global {
@@ -13,6 +14,9 @@ declare global {
 
 // Access puter from global scope
 const puter = typeof window !== 'undefined' ? (window as any).puter : null
+
+// Gemini AI configuration
+const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || '';
 
 // Silent error logging that won't trigger Next.js error boundaries
 function silentLog(message: string, data?: any): void {
@@ -182,19 +186,136 @@ export async function diagnosticPuterConnection(): Promise<string> {
   }
 }
 
+// Import Gemini AI SDK
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
 
+// Check if we're in a browser environment
+function isBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof window.document !== 'undefined';
+}
 
+// Check if Gemini AI is available (server-side or client-side)
+function isGeminiAvailable(): boolean {
+  // Always available if we have the API key from environment variables
+  return !!process.env.GOOGLE_API_KEY;
+}
 
+// Gemini AI chat function - uses Google Gemini if available
+export async function geminiChat(prompt: string): Promise<string> {
+  try {
+    console.log('[Gemini Chat] Using Google Gemini AI');
+    
+    // Generate text using the Gemini model directly
+    const { text } = await generateText({
+      model: google('gemini-1.5-flash'),
+      prompt: prompt,
+    });
+    
+    // Validate response
+    if (text === null || text === undefined) {
+      throw new Error('Received null or undefined response from Gemini AI');
+    }
+    
+    return text;
+  } catch (error) {
+    console.warn('[Gemini Chat] Gemini failed:', error);
+    
+    // Enhanced error logging
+    if (error instanceof Error) {
+      console.error('[Gemini Chat] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
+    
+    throw new Error(`Gemini AI Error: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Enhanced AI chat function - tries Gemini first, then Puter.js, then throws error
+async function aiChat(prompt: string): Promise<string> {
+  // Check if we're on client-side
+  if (typeof window === 'undefined') {
+    // Server-side: Try Gemini first
+    if (isGeminiAvailable()) {
+      try {
+        console.log('[AI Chat] Using Gemini AI (server-side)');
+        return await geminiChat(prompt);
+      } catch (geminiError) {
+        console.warn('[AI Chat] Gemini failed on server-side:', geminiError);
+        throw new Error(`Server-side AI failed: ${geminiError instanceof Error ? geminiError.message : String(geminiError)}`);
+      }
+    } else {
+      throw new Error('No AI service available on server-side');
+    }
+  }
+  
+  // Client-side: Try Gemini first if API key is available, then Puter.js
+  if (isGeminiAvailable()) {
+    try {
+      console.log('[AI Chat] Using Gemini AI (client-side)');
+      return await geminiChat(prompt);
+    } catch (geminiError) {
+      console.warn('[AI Chat] Gemini failed on client-side:', geminiError);
+      // Continue to try Puter.js
+    }
+  }
+  
+  // Try Puter.js as fallback
+  if (isPuterAIAvailable()) {
+    try {
+      console.log('[AI Chat] Using Puter.js AI (fallback)');
+      const puter = (window as any).puter;
+      
+      // Additional validation
+      if (!puter || !puter.ai || typeof puter.ai.chat !== 'function') {
+        throw new Error('Puter.js AI interface not properly loaded');
+      }
+      
+      const response = await puter.ai.chat(prompt, { model: 'gpt-4o' });
+      
+      // Validate response
+      if (response === null || response === undefined) {
+        throw new Error('Received null or undefined response from Puter.js AI');
+      }
+      
+      return String(response);
+    } catch (puterError) {
+      console.warn('[AI Chat] Puter.js failed:', puterError);
+      
+      // Enhanced error logging
+      if (puterError instanceof Error) {
+        console.error('[AI Chat] Error details:', {
+          name: puterError.name,
+          message: puterError.message,
+          stack: puterError.stack
+        });
+      }
+      
+      throw new Error(`All AI services failed - Gemini: ${puterError instanceof Error ? puterError.message : String(puterError)}`);
+    }
+  }
+  
+  throw new Error('No AI service available');
+}
 
 // Check if Puter AI is available (client-side) with immediate check
 function isPuterAIAvailable(): boolean {
-  if (typeof window === 'undefined') {
-    return false // Server-side
+  // Must be in browser environment
+  if (!isBrowser()) {
+    return false;
   }
   
   // Immediate check without any delay
-  const puter = (window as any).puter
-  return !!(puter && puter.ai && typeof puter.ai.chat === 'function')
+  try {
+    const puter = (window as any).puter;
+    return !!(puter && puter.ai && typeof puter.ai.chat === 'function');
+  } catch (error) {
+    silentLog('[isPuterAIAvailable] Error accessing window.puter:', error);
+    return false;
+  }
 }
 
 // Pre-load Puter.js availability check on page load
@@ -209,73 +330,25 @@ if (typeof window !== 'undefined') {
 
 // Wait for Puter.js to load with timeout - ultra-fast mode
 async function waitForPuter(maxRetries: number = 5, delay: number = 20): Promise<boolean> {
+  // If we're not in a browser, Puter.js is not available
+  if (!isBrowser()) {
+    return false;
+  }
+  
   for (let i = 0; i < maxRetries; i++) {
     if (isPuterAIAvailable()) {
-      return true
+      return true;
     }
-    console.log(`[Puter Wait] Attempt ${i + 1}/${maxRetries} - Waiting for Puter.js to load...`)
-    await new Promise(resolve => setTimeout(resolve, delay))
+    console.log(`[Puter Wait] Attempt ${i + 1}/${maxRetries} - Waiting for Puter.js to load...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
-  return false
-}
-
-// Simple AI chat function - uses Puter.js if available, otherwise throws error
-async function aiChat(prompt: string): Promise<string> {
-  // Check if we're on client-side
-  if (typeof window === 'undefined') {
-    throw new Error('Puter.js AI not available on server-side')
-  }
-  
-  // Wait for Puter.js to load if not immediately available - skip if already ready
-  if (!isPuterAIAvailable()) {
-    console.log('[AI Chat] Puter.js not immediately available, waiting...')
-    const puterLoaded = await waitForPuter()
-    if (!puterLoaded) {
-      throw new Error('Puter.js AI failed to load after waiting')
-    }
-  } else {
-    console.log('[AI Chat] Puter.js already available, proceeding immediately')
-  }
-  
-  // Try Puter.js (client-side only)
-  try {
-    console.log('[AI Chat] Using Puter.js AI')
-    const puter = (window as any).puter
-    
-    // Additional validation
-    if (!puter || !puter.ai || typeof puter.ai.chat !== 'function') {
-      throw new Error('Puter.js AI interface not properly loaded')
-    }
-    
-    const response = await puter.ai.chat(prompt, { model: 'gpt-4o' })
-    
-    // Validate response
-    if (response === null || response === undefined) {
-      throw new Error('Received null or undefined response from Puter.js AI')
-    }
-    
-    return String(response)
-  } catch (puterError) {
-    console.warn('[AI Chat] Puter.js failed:', puterError)
-    
-    // Enhanced error logging
-    if (puterError instanceof Error) {
-      console.error('[AI Chat] Error details:', {
-        name: puterError.name,
-        message: puterError.message,
-        stack: puterError.stack
-      })
-      throw new Error(`Puter.js AI error: ${puterError.message}`)
-    } else {
-      console.error('[AI Chat] Non-Error object:', puterError)
-      throw new Error(`Puter.js AI error: ${String(puterError)}`)
-    }
-  }
+  return false;
 }
 
 // Check if any AI is available
 function isAIAvailable(): boolean {
-  return isPuterAIAvailable()
+  // Check for either Puter.js or Gemini availability
+  return isPuterAIAvailable() || isGeminiAvailable();
 }
 
 export interface AIAnalysisResult {
@@ -344,8 +417,10 @@ function getFallbackAnalysis(): AIAnalysisResult {
 
 export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
   try {
-    if (!isAIAvailable()) {
-      console.warn("Puter.js AI not available, using fallback analysis")
+    // Check for any available AI service
+    const hasAI = isAIAvailable() || isGeminiAvailable();
+    if (!hasAI) {
+      console.warn("No AI service available, using fallback analysis")
       return getFallbackAnalysis()
     }
 
@@ -394,16 +469,27 @@ export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
     - Career progression clarity
     - Skills assessment
     - Quantifiable scoring
+    
+    IMPORTANT: Respond ONLY with the JSON object. Do not include any markdown formatting, explanations, or additional text.
     `
 
     const responseText = await aiChat(prompt)
 
     // Parse the AI response
     try {
-      const aiResult = JSON.parse(responseText)
+      // Clean the response by removing markdown code blocks if present
+      let cleanedText = responseText.trim()
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '')
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '')
+      }
+      
+      const aiResult = JSON.parse(cleanedText)
       return aiResult as AIAnalysisResult
     } catch (parseError) {
-      console.warn("Failed to parse AI response, using fallback")
+      console.warn("Failed to parse AI response, using fallback", parseError)
+      console.warn("Raw response:", responseText)
       return getFallbackAnalysis()
     }
   } catch (error) {
@@ -426,8 +512,10 @@ function getFallbackSuggestions(jobTitle?: string): string[] {
 
 export async function generatePersonalizedSuggestions(cvText: string, targetRole?: string): Promise<string[]> {
   try {
-    if (!isAIAvailable()) {
-      console.warn("Puter.js AI not available, using fallback suggestions")
+    // Check for any available AI service
+    const hasAI = isAIAvailable() || isGeminiAvailable();
+    if (!hasAI) {
+      console.warn("No AI service available, using fallback suggestions")
       return getFallbackSuggestions()
     }
 
@@ -446,6 +534,8 @@ export async function generatePersonalizedSuggestions(cvText: string, targetRole
 
     Berikan tepat 5 saran dalam format array JSON:
     ["saran 1", "saran 2", "saran 3", "saran 4", "saran 5"]
+    
+    IMPORTANT: Respond ONLY with the JSON array. Do not include any markdown formatting, explanations, or additional text.
     `
 
     const responseText = await aiChat(prompt)
@@ -463,6 +553,7 @@ export async function generatePersonalizedSuggestions(cvText: string, targetRole
       return Array.isArray(suggestions) && suggestions.length === 5 ? suggestions : getFallbackSuggestions()
     } catch {
       console.warn("Failed to parse AI suggestions, using fallback")
+      console.warn("Raw response:", responseText)
       return getFallbackSuggestions()
     }
   } catch (error) {
@@ -478,8 +569,10 @@ export async function generateHRDPersonalizedSuggestions(
   jobDescription: string = ''
 ): Promise<string[]> {
   try {
-    if (!isAIAvailable()) {
-      console.warn("Puter.js AI not available, using fallback suggestions")
+    // Check for any available AI service
+    const hasAI = isAIAvailable() || isGeminiAvailable();
+    if (!hasAI) {
+      console.warn("No AI service available, using fallback suggestions")
       return getFallbackSuggestions(jobTitle)
     }
 
@@ -503,7 +596,9 @@ Setiap suggestion harus mempertimbangkan:
 4. Format dan presentasi CV untuk ATS optimization
 5. Keyword dan technical skills yang perlu ditambahkan
 
-Jangan berikan saran generic - buat saran yang benar-benar personal berdasarkan CV dan job yang spesifik ini.`
+Jangan berikan saran generic - buat saran yang benar-benar personal berdasarkan CV dan job yang spesifik ini.
+    
+IMPORTANT: Respond ONLY with the JSON array. Do not include any markdown formatting, explanations, or additional text.`
 
     console.log("[HRD AI Suggestions] Sending prompt to AI...")
     console.log("[HRD AI Suggestions] Job Title:", jobTitle || 'Not specified')
@@ -715,12 +810,25 @@ export async function safePuterQuickstart(prompt: string = "Tell me about space"
   }
 }
 
-// AI Quickstart implementation for client-side use
+// AI Quickstart implementation for client-side use - tries Gemini first, then Puter.js
 export async function puterQuickstart(prompt: string = "Tell me about space"): Promise<string> {
   try {
     // Check if we're on client-side
     if (typeof window === 'undefined') {
       return "❌ This function must be called from client-side (browser environment)"
+    }
+    
+    // Try Gemini first if API key is available
+    if (GEMINI_API_KEY) {
+      try {
+        console.log("[AI Quickstart] Using Gemini AI");
+        const response = await geminiChat(prompt);
+        console.log("[AI Quickstart] Gemini response:", response);
+        return response;
+      } catch (geminiError) {
+        console.warn("[AI Quickstart] Gemini failed:", geminiError);
+        // Continue to try Puter.js
+      }
     }
     
     // Check if we're actually on Puter.com or a compatible environment
@@ -907,11 +1015,11 @@ export async function aiEvaluateCategory(cvText: string, category: string, jobNa
       throw new Error("AI Category Evaluator must be called from client-side")
     }
     
-    // Wait for Puter.js to be ready
-    const isPuterReady = await waitForPuter(20, 300) // Wait up to 6 seconds
+    // Wait for any AI service to be ready
+    const isAIReady = await waitForPuter(5, 20) // Wait up to 0.1 seconds
     
-    if (!isPuterReady) {
-      throw new Error("Puter.js AI is not available. Please try again in a moment.")
+    if (!isAIReady && !isGeminiAvailable()) {
+      throw new Error("No AI service is available. Please try again in a moment.")
     }
     
     console.log(`[AI Category Evaluator] Evaluating category: ${category}`)
@@ -1120,8 +1228,10 @@ export async function aiEvaluateCV(cvText: string, jobName: string = '', jobDesc
   aiExplanation: string
 }> {
   try {
-    if (!isAIAvailable()) {
-      throw new Error("Puter.js AI not available")
+    // Check for any available AI service
+    const hasAI = isAIAvailable() || isGeminiAvailable();
+    if (!hasAI) {
+      throw new Error("No AI service available")
     }
     
     console.log("[AI CV Evaluator] Starting AI-based evaluation")
@@ -1384,4 +1494,19 @@ function extractContentFromJSON(jsonObj: any): string {
   
   console.log("[Content Extractor] No content field found in JSON structure")
   return "" // Return empty string if no content found
+}
+
+// Test function for Gemini AI integration
+export async function testGeminiIntegration(): Promise<string> {
+  try {
+    if (!GEMINI_API_KEY) {
+      return "❌ Gemini API key not configured";
+    }
+    
+    const testPrompt = "Say hello in Indonesian";
+    const response = await geminiChat(testPrompt);
+    return `✅ Gemini AI is working! Response: ${response}`;
+  } catch (error) {
+    return `❌ Gemini AI test failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }

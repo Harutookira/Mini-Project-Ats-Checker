@@ -30,6 +30,29 @@ import {
 import { useRouter } from "next/navigation"
 import { safePuterQuickstart } from "@/lib/ai-analyzer"
 
+// Add this new function to handle Gemini AI requests
+async function handleGeminiQuickstart(prompt: string): Promise<string> {
+  try {
+    const response = await fetch('/api/generate-ai-analysis', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ customPrompt: prompt }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.result || "No response from AI";
+  } catch (error) {
+    console.error('Error with Gemini quickstart:', error);
+    return `❌ Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`;
+  }
+}
+
 // Text analysis interfaces and functions
 interface TextAnalysis {
   totalWords: number
@@ -214,21 +237,19 @@ export default function ResultsPage() {
     setIsLoading(false)
   }, [router])
 
-
-
   const handlePuterQuickstart = async () => {
-    setIsLoadingPuter(true)
+    setIsLoadingPuter(true);
     try {
       // Build the prompt in parts to avoid template literal nesting issues
-      let prompt = customPrompt
+      let prompt = customPrompt;
       
       if (!customPrompt) {
         // Base prompt
-        prompt = `Kamu adalah seorang HRD yang melakukan pengecekan terhadap CV ATS. Analisis CV berikut:\n\n${analysis?.extractedText || 'CV text not available'}\n\n`
+        prompt = `Kamu adalah seorang HRD yang melakukan pengecekan terhadap CV ATS. Analisis CV berikut:\n\n${analysis?.extractedText || 'CV text not available'}\n\n`;
         
         // Add job information if available
         if (jobData) {
-          prompt += `DENGAN MEMBANDINGKAN TERHADAP POSISI TARGET:\n- Nama Pekerjaan: ${jobData.jobName}\n- Deskripsi Pekerjaan: ${jobData.jobDescription}\n\nPASTIKAN analisis KATA KUNCI SESUAI JOB menggunakan perbandingan DETAIL dengan job description di atas.\n\n`
+          prompt += `DENGAN MEMBANDINGKAN TERHADAP POSISI TARGET:\n- Nama Pekerjaan: ${jobData.jobName}\n- Deskripsi Pekerjaan: ${jobData.jobDescription}\n\nPASTIKAN analisis KATA KUNCI SESUAI JOB menggunakan perbandingan DETAIL dengan job description di atas.\n\n`;
         }
         
         // Add main analysis instructions - optimized for ultra-fast AI response
@@ -236,13 +257,13 @@ export default function ResultsPage() {
 1. Dampak Kuantitatif (25%): Ada angka/metrik?
 2. Panjang CV (20%): 200-600 kata?
 3. Kelengkapan CV (30%): Kontak+struktur?
-4. Kata Kunci Job (25%):`
+4. Kata Kunci Job (25%):`;
         
         // Add job-specific keyword analysis if job data is available
         if (jobData) {
-          prompt += `   - BANDINGKAN dengan "${jobData.jobDescription}"\n   - Hitung % kata kunci cocok\n   - Analisis technical skills sesuai "${jobData.jobName}"\n\n`
+          prompt += `   - BANDINGKAN dengan "${jobData.jobDescription}"\n   - Hitung % kata kunci cocok\n   - Analisis technical skills sesuai "${jobData.jobName}"\n\n`;
         } else {
-          prompt += `   - Keywords relevan industri? Technical skills sesuai bidang? Action verbs tepat?\n\n`
+          prompt += `   - Keywords relevan industri? Technical skills sesuai bidang? Action verbs tepat?\n\n`;
         }
         
         // Add output format instructions - minimal format for ultra-fast processing
@@ -251,45 +272,63 @@ export default function ResultsPage() {
 📊 [X]/100 [X]/100 [X]/100 [X]/100
 🎯 TOTAL: [X]/100 Grade:[X]
 ❌ [1 masalah]
-✅ [1 saran]`
+✅ [1 saran]`;
       }
-      console.log("[UI] Testing Puter with prompt:", prompt)
+      console.log("[UI] Testing Gemini with prompt:", prompt);
       
-      // Use the safe wrapper function to prevent uncaught errors
-      console.log("[UI] Calling safePuterQuickstart function...")
-      const result = await safePuterQuickstart(prompt)
-      console.log("[UI] Received result:", result)
+      // Use the API route for Gemini AI instead of calling it directly
+      console.log("[UI] Calling Gemini AI API route...");
       
-      setPuterResult(result)
-      setShowPuter(true)
+      const response = await fetch('/api/generate-ai-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cvText: analysis?.extractedText || '',
+          jobName: jobData?.jobName || '',
+          jobDescription: jobData?.jobDescription || '',
+          customPrompt: prompt
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const result = data.result || "No response from AI";
+      
+      console.log("[UI] Received result:", result);
+      
+      setPuterResult(result);
+      setShowPuter(true);
     } catch (error) {
-      console.error('Error with Puter quickstart:', error)
+      console.error('Error with Gemini quickstart:', error);
       
       // Enhanced error logging
-      let errorMessage = 'Unknown error occurred'
+      let errorMessage = 'Unknown error occurred';
       
       if (error instanceof Error) {
-        errorMessage = error.message || 'Error occurred without message'
+        errorMessage = error.message || 'Error occurred without message';
         console.error('Error details:', {
           name: error.name,
           message: error.message,
           stack: error.stack
-        })
+        });
       } else if (typeof error === 'string') {
-        errorMessage = error
+        errorMessage = error;
       } else if (error && typeof error === 'object') {
-        errorMessage = JSON.stringify(error)
-        console.error('Non-Error object caught:', error)
+        errorMessage = JSON.stringify(error);
+        console.error('Non-Error object caught:', error);
       }
       
-      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Wait for Puter.js to fully load\n• Check browser console for errors\n• Ensure you're logged in to Puter.com\n• Try refreshing the page\n• Check your internet connection`)
-      setShowPuter(true)
+      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Check your internet connection\n• Ensure the API server is running\n• Check browser console for errors`);
+      setShowPuter(true);
     } finally {
-      setIsLoadingPuter(false)
+      setIsLoadingPuter(false);
     }
-  }
-
-
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -445,8 +484,8 @@ export default function ResultsPage() {
                 <FileText className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">ATS Analysis Results</h1>
-                <p className="text-sm text-muted-foreground">{cvData?.name}</p>
+                <h1 className="text-xl font-bold text-foreground">ATS CV Checker</h1>
+                <p className="text-sm text-muted-foreground">Analyze and optimize your resume</p>
               </div>
             </div>
           </div>
@@ -1006,7 +1045,7 @@ export default function ResultsPage() {
                   <CardTitle className="text-xl text-primary flex items-center gap-2">
                     Demo Analisis CV dengan AI
                     <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                      Skor Detail • GPT-4o
+                      Skor Detail • Gemini AI
                     </Badge>
                   </CardTitle>
                 </div>
@@ -1040,7 +1079,7 @@ export default function ResultsPage() {
                         </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Brain className="w-4 h-4" />
-                          <span>Model: gpt-4o</span>
+                          <span>Model: Gemini AI</span>
                           <span>•</span>
                           <span>Cost: Free</span>
                         </div>
@@ -1356,7 +1395,7 @@ export default function ResultsPage() {
                               <Brain className="w-4 h-4 text-blue-600" />
                               <div>
                                 <div className="font-medium text-foreground">AI Model</div>
-                                <div className="text-muted-foreground text-xs">GPT-4o via Puter</div>
+                                <div className="text-muted-foreground text-xs">Gemini AI</div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border">
