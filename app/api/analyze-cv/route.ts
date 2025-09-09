@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { analyzeCV } from "@/lib/cv-analyzer"
-import { analyzeWithAI, generatePersonalizedSuggestions } from "@/lib/ai-analyzer"
+import { analyzeWithAI, generatePersonalizedSuggestions, generateHRDPersonalizedSuggestions } from "@/lib/ai-analyzer"
 import * as mammoth from "mammoth"
 
 // Global cache type declaration
@@ -17,6 +17,84 @@ declare global {
     filesize: number
     filetype: string
   }> | undefined
+}
+
+// Function to preserve and normalize bullet points in text
+function preserveBulletPoints(text: string): string {
+  if (!text) return text
+  
+  // Split text into lines for processing
+  let lines = text.split(/\r?\n/)
+  
+  // Process each line to identify and normalize bullet points
+  lines = lines.map((line, index) => {
+    const trimmedLine = line.trim()
+    
+    // Skip empty lines
+    if (!trimmedLine) return line
+    
+    // Check for various bullet point patterns
+    const bulletPatterns = [
+      /^[•·‣⁃▪▫‒–—―◦⦿⦾]\s*(.+)$/,           // Unicode bullet points
+      /^[\*\+\-]\s+(.+)$/,                     // ASCII bullets (*, +, -)
+      /^[\u2022\u2023\u25E6\u2043\u204C\u204D\u2219\u25AA\u25AB\u25A0]\s*(.+)$/, // More unicode bullets
+      /^[\d]+[\.):]\s*(.+)$/,                  // Numbered lists (1. 1) 1:)
+      /^[a-zA-Z][\.):]\s*(.+)$/,               // Lettered lists (a. a) a:)
+      /^[ivx]+[\.):]\s*(.+)$/i,                // Roman numerals
+      /^\([\da-zA-Z]+\)\s*(.+)$/,             // Parenthetical numbering
+      /^[\u25cf\u25cb\u25aa\u25ab\u2013\u2014]\s*(.+)$/,  // Additional bullet symbols
+    ]
+    
+    // Check if line matches any bullet pattern
+    for (const pattern of bulletPatterns) {
+      const match = trimmedLine.match(pattern)
+      if (match) {
+        // Preserve the bullet point with consistent formatting
+        const content = match[1] || match[0]
+        return `• ${content.trim()}`
+      }
+    }
+    
+    // Check for lines that might be experience bullets or achievements
+    // Common patterns in CVs:
+    if (trimmedLine.length > 10 && trimmedLine.length < 300) {
+      // Check for common CV bullet point indicators
+      const cvBulletIndicators = [
+        /^(Developed?|Implemented?|Managed?|Led|Created?|Designed?|Built|Achieved?|Increased?|Reduced?|Improved?)/i,
+        /^(Responsible for|In charge of|Worked on|Collaborated|Coordinated)/i,
+        /^(Successfully|Effectively|Efficiently)/i,
+        /(\d+%|\d+\+|\$\d+|\d+ years?|\d+ months?)/,  // Contains metrics
+      ]
+      
+      const shouldBeBullet = cvBulletIndicators.some(pattern => pattern.test(trimmedLine))
+      
+      if (shouldBeBullet && !trimmedLine.endsWith(':') && !/^[A-Z\s]+$/.test(trimmedLine)) {
+        return `• ${trimmedLine}`
+      }
+    }
+    
+    // Check for indented lines that might be sub-bullets
+    if (/^\s{2,}/.test(line) && trimmedLine.length > 5) {
+      return `  • ${trimmedLine}`
+    }
+    
+    return line
+  })
+  
+  // Join lines back together
+  let processedText = lines.join('\n')
+  
+  // Clean up extra whitespace while preserving structure
+  processedText = processedText
+    .replace(/\n\s*\n\s*\n/g, '\n\n')  // Remove excessive line breaks
+    .replace(/[ \t]+/g, ' ')          // Normalize spaces
+    .replace(/•\s+•/g, '•')      // Fix double bullets
+    .trim()
+  
+  console.log('[Bullet Processing] Original length:', text.length, 'Processed length:', processedText.length)
+  console.log('[Bullet Processing] Bullet points found:', (processedText.match(/•/g) || []).length)
+  
+  return processedText
 }
 
 export async function POST(request: NextRequest) {
@@ -52,19 +130,37 @@ export async function POST(request: NextRequest) {
       originalFileBuffer = Buffer.from(await file.arrayBuffer())
       
       if (file.type === "text/plain") {
-        extractedText = await file.text()
+        const rawText = await file.text()
+        extractedText = preserveBulletPoints(rawText)
+        
+        console.log('[Text Processing] Raw text length:', rawText.length)
+        console.log('[Text Processing] Processed text length:', extractedText.length)
       } else if (file.type === "application/pdf") {
         // Parse PDF file using dynamic import to avoid build issues
         const pdfParse = (await import('pdf-parse')).default
         const pdfData = await pdfParse(originalFileBuffer)
-        extractedText = pdfData.text
+        
+        // Process the extracted text to preserve bullet points
+        const rawText = pdfData.text
+        extractedText = preserveBulletPoints(rawText)
+        
+        console.log('[PDF Processing] Raw text length:', rawText.length)
+        console.log('[PDF Processing] Processed text length:', extractedText.length)
+        console.log('[PDF Processing] Sample processed text:', extractedText.substring(0, 500) + '...')
       } else if (
         file.type === "application/msword" ||
         file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       ) {
         // Parse Word document
         const result = await mammoth.extractRawText({ buffer: originalFileBuffer })
-        extractedText = result.value
+        
+        // Process the extracted text to preserve bullet points
+        const rawText = result.value
+        extractedText = preserveBulletPoints(rawText)
+        
+        console.log('[Word Processing] Raw text length:', rawText.length)
+        console.log('[Word Processing] Processed text length:', extractedText.length)
+        console.log('[Word Processing] Sample processed text:', extractedText.substring(0, 500) + '...')
       }
 
       // Check if we successfully extracted any text
@@ -118,15 +214,40 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Analysis completed:", analysis.isAIEnhanced ? "AI Enhanced" : "Traditional")
 
-    // Use static personalized suggestions to avoid server-side AI calls
-    const personalizedSuggestions = [
-      "Tambahkan lebih banyak pencapaian yang dapat diukur dengan angka spesifik",
-      "Gunakan kata kerja aktif yang kuat di awal setiap poin pengalaman",
-      "Pastikan format CV konsisten dan mudah dibaca oleh ATS",
-      "Sertakan kata kunci yang relevan dengan posisi yang dilamar",
-      "Tambahkan ringkasan profesional yang menonjolkan kualifikasi utama"
-    ]
-    console.log("[v0] Personalized suggestions provided:", personalizedSuggestions.length, "suggestions")
+    // Generate AI-powered personalized suggestions from HRD perspective
+    let personalizedSuggestions: string[]
+    
+    // Always try AI first for dynamic suggestions
+    console.log("[v0] Generating AI-powered HRD personalized suggestions...")
+    console.log("[v0] Job context:", { jobName: jobName || 'Not specified', jobDescription: jobDescription || 'Not specified' })
+    
+    try {
+      personalizedSuggestions = await generateHRDPersonalizedSuggestions(
+        extractedText,
+        jobName,
+        jobDescription
+      )
+      
+      // Verify we got valid AI suggestions
+      if (personalizedSuggestions && personalizedSuggestions.length === 5) {
+        console.log("[v0] ✅ AI-powered HRD personalized suggestions successfully generated:", personalizedSuggestions.length, "suggestions")
+        console.log("[v0] AI Suggestions:", personalizedSuggestions)
+      } else {
+        throw new Error("Invalid AI response: Expected 5 suggestions, got " + (personalizedSuggestions?.length || 0))
+      }
+    } catch (suggestionError) {
+      console.error("[v0] ❌ Failed to generate AI suggestions:", suggestionError)
+      console.warn("[v0] Using static fallback suggestions due to AI failure")
+      
+      // Enhanced fallback with job context awareness
+      personalizedSuggestions = [
+        `Sesuaikan CV dengan kata kunci spesifik dari posisi ${jobName || 'yang dilamar'} untuk meningkatkan ATS compatibility`,
+        "Tambahkan lebih banyak pencapaian yang dapat diukur dengan angka spesifik dan persentase",
+        "Gunakan kata kerja aktif yang kuat di awal setiap poin pengalaman kerja",
+        "Pastikan format CV konsisten dan mudah dibaca oleh sistem ATS modern",
+        "Sertakan ringkasan profesional yang menonjolkan kualifikasi utama sesuai job requirement"
+      ]
+    }
 
     return NextResponse.json({
       success: true,

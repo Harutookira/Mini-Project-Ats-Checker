@@ -28,7 +28,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { generateAnimalFacts, puterQuickstart } from "@/lib/ai-analyzer"
+import { safePuterQuickstart } from "@/lib/ai-analyzer"
 
 // Text analysis interfaces and functions
 interface TextAnalysis {
@@ -190,9 +190,6 @@ export default function ResultsPage() {
   const [analysis, setAnalysis] = useState<CVAnalysis | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showPreview, setShowPreview] = useState(false)
-  const [animalFacts, setAnimalFacts] = useState<string[]>([])
-  const [isLoadingFacts, setIsLoadingFacts] = useState(false)
-  const [showAITest, setShowAITest] = useState(false)
   const [puterResult, setPuterResult] = useState<string>('')
   const [isLoadingPuter, setIsLoadingPuter] = useState(false)
   const [showPuter, setShowPuter] = useState(false)
@@ -217,21 +214,7 @@ export default function ResultsPage() {
     setIsLoading(false)
   }, [router])
 
-  const handleGenerateAnimalFacts = async () => {
-    setIsLoadingFacts(true)
-    try {
-      const facts = await generateAnimalFacts()
-      setAnimalFacts(facts)
-      setShowAITest(true)
-    } catch (error) {
-      console.error('Error generating animal facts:', error)
-      // Show error message instead of fallback facts
-      setAnimalFacts(["❌ Failed to generate animal facts. Please check AI integration."])
-      setShowAITest(true)
-    } finally {
-      setIsLoadingFacts(false)
-    }
-  }
+
 
   const handlePuterQuickstart = async () => {
     setIsLoadingPuter(true)
@@ -248,44 +231,65 @@ export default function ResultsPage() {
           prompt += `DENGAN MEMBANDINGKAN TERHADAP POSISI TARGET:\n- Nama Pekerjaan: ${jobData.jobName}\n- Deskripsi Pekerjaan: ${jobData.jobDescription}\n\nPASTIKAN analisis KATA KUNCI SESUAI JOB menggunakan perbandingan DETAIL dengan job description di atas.\n\n`
         }
         
-        // Add main analysis instructions
-        prompt += `Lakukan analisis mendalam terhadap 4 kategori berikut dengan memberikan SKOR untuk masing-masing kategori dan SKOR TOTAL:\n\n1. **Dampak Kuantitatif** (25% bobot):\n   - Apakah CV menunjukkan pencapaian yang terukur?\n   - Adakah angka, persentase, atau metrik spesifik?\n   - Relevansi pengalaman dengan posisi target?\n\n2. **Panjang CV** (20% bobot):\n   - Apakah panjang CV optimal (200-600 kata)?\n   - Penggunaan bahasa baku dan formal?\n   - Keseimbangan informasi dengan pengalaman?\n\n3. **Kelengkapan CV** (30% bobot):\n   - Informasi kontak lengkap (email, telepon)?\n   - Struktur CV terorganisir (summary, experience, education, skills)?\n   - Format profesional dan rapi?\n\n4. **Kata Kunci Sesuai Job** (25% bobot):\n`
+        // Add main analysis instructions - optimized for ultra-fast AI response
+        prompt += `Analisis SUPER CEPAT 4 kategori:
+1. Dampak Kuantitatif (25%): Ada angka/metrik?
+2. Panjang CV (20%): 200-600 kata?
+3. Kelengkapan CV (30%): Kontak+struktur?
+4. Kata Kunci Job (25%):`
         
         // Add job-specific keyword analysis if job data is available
         if (jobData) {
-          prompt += `   - BANDINGKAN CV dengan job description "${jobData.jobDescription}" secara detail\n   - Hitung persentase kata kunci yang cocok (contoh: 15 dari 25 kata kunci = 60%)\n   - Analisis technical skills yang sesuai dengan posisi "${jobData.jobName}"\n   - Periksa action verbs yang relevan dengan requirement job\n\n`
+          prompt += `   - BANDINGKAN dengan "${jobData.jobDescription}"\n   - Hitung % kata kunci cocok\n   - Analisis technical skills sesuai "${jobData.jobName}"\n\n`
         } else {
-          prompt += `   - Penggunaan keywords yang relevan dengan industri?\n   - Technical skills sesuai bidang pekerjaan?\n   - Action verbs yang tepat?\n\n`
+          prompt += `   - Keywords relevan industri? Technical skills sesuai bidang? Action verbs tepat?\n\n`
         }
         
-        // Add output format instructions
-        prompt += `Berikan hasil dalam format yang MUDAH DIBACA dengan:\n\n📊 **SKOR KATEGORI:**\n• Dampak Kuantitatif: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Panjang CV: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Kelengkapan CV: [X]/100 (Status: [excellent/good/needs-improvement/poor])\n• Kata Kunci Job: [X]/100 (Status: [excellent/good/needs-improvement/poor])`
-        
-        // Add job match percentage if job data available
-        if (jobData) {
-          prompt += ` - Tingkat kesesuaian: [X]% keyword cocok`
-        }
-        
-        prompt += `\n\n🎯 **SKOR TOTAL: [X]/100** (Grade: A+/A/B/C/D/F)\n\n❌ **MASALAH UTAMA:**\n[List 3-5 masalah prioritas]\n\n✅ **REKOMENDASI PERBAIKAN:**\n[List 3-5 saran actionable]\n\n💡 **KESIMPULAN:**\n[Penjelasan singkat dan saran prioritas utama]`
+        // Add output format instructions - minimal format for ultra-fast processing
+        prompt += `Format SINGKAT:
+
+📊 [X]/100 [X]/100 [X]/100 [X]/100
+🎯 TOTAL: [X]/100 Grade:[X]
+❌ [1 masalah]
+✅ [1 saran]`
       }
       console.log("[UI] Testing Puter with prompt:", prompt)
       
-      // Use the robust puterQuickstart function from ai-analyzer
-      console.log("[UI] Calling puterQuickstart function...")
-      const result = await puterQuickstart(prompt)
+      // Use the safe wrapper function to prevent uncaught errors
+      console.log("[UI] Calling safePuterQuickstart function...")
+      const result = await safePuterQuickstart(prompt)
       console.log("[UI] Received result:", result)
       
       setPuterResult(result)
       setShowPuter(true)
     } catch (error) {
       console.error('Error with Puter quickstart:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Wait for Puter.js to fully load\n• Check browser console for errors\n• Ensure you're logged in to Puter.com`)
+      
+      // Enhanced error logging
+      let errorMessage = 'Unknown error occurred'
+      
+      if (error instanceof Error) {
+        errorMessage = error.message || 'Error occurred without message'
+        console.error('Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        })
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error)
+        console.error('Non-Error object caught:', error)
+      }
+      
+      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Wait for Puter.js to fully load\n• Check browser console for errors\n• Ensure you're logged in to Puter.com\n• Try refreshing the page\n• Check your internet connection`)
       setShowPuter(true)
     } finally {
       setIsLoadingPuter(false)
     }
   }
+
+
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -857,81 +861,7 @@ export default function ResultsPage() {
 
 
 
-        {/* AI Insights */}
-        {analysis.aiInsights && (
-          <Card className="mb-8">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-accent" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl text-primary">AI-Powered Insights</CardTitle>
-                  <CardDescription>Advanced analysis powered by Gemini AI</CardDescription>
-                </div>
-                <Badge className={getPriorityColor(analysis.aiInsights.improvementPriority)}>
-                  {analysis.aiInsights.improvementPriority} priority
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h4 className="font-semibold text-foreground mb-2">Overall Assessment</h4>
-                <p className="text-muted-foreground">{analysis.aiInsights.overallAssessment}</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Career Level: <span className="font-medium">{analysis.aiInsights.careerLevelAssessment}</span>
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    Key Strengths
-                  </h4>
-                  <ul className="space-y-2">
-                    {analysis.aiInsights.strengths.map((strength, index) => (
-                      <li key={index} className="flex items-start gap-2 text-muted-foreground">
-                        <div className="w-1.5 h-1.5 bg-green-600 rounded-full mt-2 flex-shrink-0" />
-                        {strength}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-yellow-600" />
-                    Areas for Improvement
-                  </h4>
-                  <ul className="space-y-2">
-                    {analysis.aiInsights.weaknesses.map((weakness, index) => (
-                      <li key={index} className="flex items-start gap-2 text-muted-foreground">
-                        <div className="w-1.5 h-1.5 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
-                        {weakness}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                  <Target className="w-4 h-4 text-blue-600" />
-                  Industry-Specific Advice
-                </h4>
-                <ul className="space-y-2">
-                  {analysis.aiInsights.industrySpecificAdvice.map((advice, index) => (
-                    <li key={index} className="flex items-start gap-2 text-muted-foreground">
-                      <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
-                      {advice}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+       
 
         {/* Personalized Suggestions */}
         {analysis.personalizedSuggestions && (
@@ -1047,16 +977,13 @@ export default function ResultsPage() {
                   <Brain className="w-6 h-6 text-blue-600" />
                 </div>
                 <div className="flex-1 space-y-3">
-                  <h3 className="font-semibold text-lg text-blue-900">Ingin Analisis dengan AI?</h3>
+                  <h3 className="font-semibold text-lg text-blue-900">Ingin Analisis AI Secara Menyeluruh ?</h3>
                   <p className="text-blue-800 leading-relaxed">
-                    Analisis di atas menggunakan algoritma tradisional yang cepat dan akurat. 
-                    Untuk mendapatkan <strong>analisis berbasis AI dengan Puter.js</strong>, 
-                    gunakan demo interaktif di bawah ini yang dapat menganalisis CV Anda dengan GPT-4o.
+                    Untuk mendapatkan <strong>analisis berbasis AI dengan GPT-4o.</strong>, 
+                    gunakan demo interaktif di bawah ini yang dapat menganalisis CV Anda
                   </p>
                   <div className="flex items-center gap-2 text-sm text-blue-700">
                     <CheckCircle className="w-4 h-4" />
-                    <span>Gratis menggunakan Puter.js</span>
-                    <span>•</span>
                     <span>AI Model: GPT-4o</span>
                     <span>•</span>
                     <span>Analisis dalam Bahasa Indonesia</span>
@@ -1067,7 +994,7 @@ export default function ResultsPage() {
           </Card>
         </div>
 
-        {/* Puter AI Quickstart Section */}
+        {/* AI CV Analysis Demo Section */}
         <div className="mt-12">
           <Card className="border-2 border-dashed border-primary/20 bg-gradient-to-r from-primary/5 to-blue-50">
             <CardHeader>
@@ -1077,15 +1004,11 @@ export default function ResultsPage() {
                 </div>
                 <div className="flex-1">
                   <CardTitle className="text-xl text-primary flex items-center gap-2">
-                    Analisis CV dengan Puter AI
+                    Demo Analisis CV dengan AI
                     <Badge variant="secondary" className="bg-blue-100 text-blue-800">
                       Skor Detail • GPT-4o
                     </Badge>
                   </CardTitle>
-                  <CardDescription>
-                    Gunakan Puter.js AI untuk menganalisis CV dengan teknologi GPT-4o. 
-                    Dapatkan skor individual per kategori, skor total, grade, dan rekomendasi yang mudah dibaca.
-                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -1098,27 +1021,26 @@ export default function ResultsPage() {
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                         <label className="text-sm font-medium text-foreground">
-                          Test Puter AI untuk Analisis CV
+                          Demo Analisis CV dengan AI
                         </label>
                       </div>
-                      <input
+                      {/* <input
                         type="text"
                         value={customPrompt}
                         onChange={(e) => setCustomPrompt(e.target.value)}
                         placeholder="Masukkan teks CV Anda untuk analisis mendalam dengan skor per kategori dan total skor..."
                         className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
+                        
+                      /> */}
                     </div>
                     <div className="flex flex-col sm:flex-row gap-4 items-start">
                       <div className="flex-1">
                         <p className="text-sm text-muted-foreground mb-2">
-                          AI akan menganalisis CV dengan memberikan <strong>skor individual</strong> untuk 4 kategori dan <strong>skor total</strong>: Dampak Kuantitatif, Panjang CV, Kelengkapan CV, dan Kata Kunci Job.
+                          Klik tombol untuk mendapatkan <strong>analisis mendalam dengan skor individual</strong> untuk 4 kategori utama: Dampak Kuantitatif, Panjang CV, Kelengkapan CV, dan Kata Kunci Job. AI akan memberikan <strong>skor total</strong> beserta rekomendasi perbaikan.
                         </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Brain className="w-4 h-4" />
                           <span>Model: gpt-4o</span>
-                          <span>•</span>
-                          <span>SDK: Puter.js</span>
                           <span>•</span>
                           <span>Cost: Free</span>
                         </div>
@@ -1137,7 +1059,7 @@ export default function ResultsPage() {
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4 mr-2" />
-                            Test Puter AI
+                            Analisis dengan AI
                           </>
                         )}
                       </Button>
@@ -1191,7 +1113,7 @@ export default function ResultsPage() {
                         <div className="p-6">
                           <div className="flex items-center gap-2 mb-6">
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            <h3 className="font-semibold text-foreground text-lg">Hasil Analisis CV dengan Puter AI</h3>
+                            <h3 className="font-semibold text-foreground text-lg">Hasil Analisis CV dengan AI</h3>
                             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                               ✅ GPT-4o
                             </Badge>
@@ -1444,13 +1366,6 @@ export default function ResultsPage() {
                                 <div className="text-muted-foreground text-xs">4 Kategori HRD</div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border">
-                              <Lightbulb className="w-4 h-4 text-purple-600" />
-                              <div>
-                                <div className="font-medium text-foreground">Cost</div>
-                                <div className="text-muted-foreground text-xs">Free with Puter</div>
-                              </div>
-                            </div>
                           </div>
                           
                           {/* Success Status */}
@@ -1458,7 +1373,7 @@ export default function ResultsPage() {
                             <div className="flex items-center gap-2 text-sm text-green-800">
                               <CheckCircle className="w-4 h-4" />
                               <span>
-                                <strong>Status Integrasi:</strong> Puter.js AI berhasil memberikan analisis CV dengan format yang mudah dibaca!
+                                <strong>Status Integrasi:</strong> AI berhasil memberikan analisis CV dengan format yang mudah dibaca!
                               </span>
                             </div>
                           </div>
@@ -1467,6 +1382,8 @@ export default function ResultsPage() {
                     )}
                   </div>
                 )}
+
+
 
               </div>
             </CardContent>

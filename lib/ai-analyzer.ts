@@ -14,19 +14,201 @@ declare global {
 // Access puter from global scope
 const puter = typeof window !== 'undefined' ? (window as any).puter : null
 
-// Check if Puter AI is available (client-side)
+// Silent error logging that won't trigger Next.js error boundaries
+function silentLog(message: string, data?: any): void {
+  try {
+    // Use setTimeout to prevent immediate console error triggering
+    setTimeout(() => {
+      try {
+        console.log(message, data || '')
+      } catch {
+        // Even this fails, just continue silently
+      }
+    }, 0)
+  } catch {
+    // Completely silent fallback
+  }
+}
+
+// Ultra-safe error boundary that never throws
+function safeErrorBoundary<T>(operation: () => T, fallback: T): T {
+  try {
+    return operation()
+  } catch (error) {
+    // Log silently without triggering error boundaries
+    silentLog('[Safe Error Boundary] Operation failed:', error)
+    return fallback
+  }
+}
+
+// Async version of safe error boundary
+async function safeAsyncErrorBoundary<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    // Log silently without triggering error boundaries
+    silentLog('[Safe Async Error Boundary] Operation failed:', error)
+    return fallback
+  }
+}
+
+// Export debug function for UI use
+export function checkPuterStatus(): string {
+  if (typeof window === 'undefined') {
+    return '❌ Running on server-side - Puter.js requires browser environment'
+  }
+  
+  // Check hostname compatibility
+  const hostname = window.location?.hostname || ''
+  const isCompatibleHost = hostname.includes('puter.com') || hostname.includes('localhost') || hostname.includes('127.0.0.1')
+  
+  if (!isCompatibleHost) {
+    return `🌐 Environment: ${hostname}\n⚠️ Puter.js works best on Puter.com or localhost environments\n💡 Try opening this app on Puter.com for full AI features`
+  }
+  
+  const puter = (window as any).puter
+  
+  if (!puter) {
+    return `❌ Puter.js not loaded\n💡 Solutions:\n• Make sure you're running on Puter.com\n• Check browser console for script loading errors\n• Refresh the page and wait for Puter.js to load`
+  }
+  
+  if (!puter.ai) {
+    return `⚠️ Puter.js loaded but AI module not available\n💡 Solutions:\n• Wait a moment for AI module to initialize\n• Check your Puter.com account permissions\n• Try logging out and back in to Puter.com`
+  }
+  
+  if (typeof puter.ai.chat !== 'function') {
+    return `⚠️ Puter.js AI loaded but chat function not available\n💡 This might indicate an authentication issue\n• Ensure you're logged in to Puter.com\n• Check if your account has AI access`
+  }
+  
+  return '✅ Puter.js AI is fully available and ready to use'
+}
+
+// Enhanced diagnostic function for troubleshooting
+export async function diagnosticPuterConnection(): Promise<string> {
+  const results: string[] = []
+  
+  try {
+    // Environment check
+    if (typeof window === 'undefined') {
+      return '❌ Server-side environment - Puter.js requires browser environment'
+    }
+    results.push('✅ Browser environment detected')
+    
+    // Hostname check
+    const hostname = window.location?.hostname || 'unknown'
+    results.push(`🌐 Current hostname: ${hostname}`)
+    
+    const isCompatibleHost = hostname.includes('puter.com') || hostname.includes('localhost') || hostname.includes('127.0.0.1')
+    if (!isCompatibleHost) {
+      results.push('⚠️ Warning: For optimal AI performance, run on Puter.com')
+    } else {
+      results.push('✅ Compatible hostname detected')
+    }
+    
+    // Puter object check
+    const puter = (window as any).puter
+    if (!puter) {
+      results.push('❌ window.puter not found')
+      results.push('')
+      results.push('💡 Troubleshooting steps:')
+      results.push('• Open this app on Puter.com')
+      results.push('• Refresh the page and wait for scripts to load')
+      results.push('• Check browser console for JavaScript errors')
+      return results.join('\n')
+    }
+    results.push('✅ window.puter exists')
+    
+    // AI module check
+    if (!puter.ai) {
+      results.push('❌ puter.ai not found')
+      results.push(`📊 Available puter properties: ${Object.keys(puter).join(', ')}`)
+      results.push('')
+      results.push('💡 Solutions:')
+      results.push('• Wait a few moments for AI module to initialize')
+      results.push('• Refresh the page')
+      results.push('• Check your Puter.com account status')
+      return results.join('\n')
+    }
+    results.push('✅ puter.ai module exists')
+    
+    // Chat function check
+    if (typeof puter.ai.chat !== 'function') {
+      results.push(`❌ puter.ai.chat is not a function (type: ${typeof puter.ai.chat})`)
+      results.push('')
+      results.push('💡 Authentication issue solutions:')
+      results.push('• Log in to your Puter.com account')
+      results.push('• Check if your account has AI access permissions')
+      results.push('• Try logging out and back in')
+      return results.join('\n')
+    }
+    results.push('✅ puter.ai.chat function is available')
+    
+    // Test a simple AI call
+    try {
+      results.push('')
+      results.push('🧪 Testing AI connection...')
+      const testResponse = await puter.ai.chat('Hello', { model: 'gpt-4o' })
+      results.push(`✅ AI test successful! Response: ${String(testResponse).substring(0, 50)}...`)
+      results.push('')
+      results.push('✨ Puter.js AI is fully functional and ready for CV analysis!')
+    } catch (testError) {
+      results.push(`❌ AI test failed:`)
+      
+      if (testError && typeof testError === 'object') {
+        const stringified = JSON.stringify(testError)
+        if (stringified === '{}') {
+          results.push('⚠️ Empty error object - typically indicates:')
+          results.push('• Network connectivity issues')
+          results.push('• Authentication/authorization problems')
+          results.push('• API service temporarily unavailable')
+          results.push('')
+          results.push('💡 Try these solutions:')
+          results.push('• Check your internet connection')
+          results.push('• Refresh the page and try again')
+          results.push('• Log out and back in to Puter.com')
+          results.push('• Wait a few minutes and retry')
+        } else {
+          results.push(`Error details: ${stringified}`)
+        }
+      } else {
+        results.push(`Error: ${String(testError)}`)
+      }
+    }
+    
+    return results.join('\n')
+    
+  } catch (error) {
+    return `❌ Diagnostic error: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
+
+
+
+
+// Check if Puter AI is available (client-side) with immediate check
 function isPuterAIAvailable(): boolean {
   if (typeof window === 'undefined') {
     return false // Server-side
   }
   
-  // Check if puter object exists and has ai.chat method
+  // Immediate check without any delay
   const puter = (window as any).puter
   return !!(puter && puter.ai && typeof puter.ai.chat === 'function')
 }
 
-// Wait for Puter.js to load with timeout
-async function waitForPuter(maxRetries: number = 10, delay: number = 500): Promise<boolean> {
+// Pre-load Puter.js availability check on page load
+if (typeof window !== 'undefined') {
+  // Check immediately when script loads
+  setTimeout(() => {
+    if (isPuterAIAvailable()) {
+      console.log('[Puter AI] Pre-loaded and ready!')
+    }
+  }, 100)
+}
+
+// Wait for Puter.js to load with timeout - ultra-fast mode
+async function waitForPuter(maxRetries: number = 5, delay: number = 20): Promise<boolean> {
   for (let i = 0; i < maxRetries; i++) {
     if (isPuterAIAvailable()) {
       return true
@@ -44,23 +226,50 @@ async function aiChat(prompt: string): Promise<string> {
     throw new Error('Puter.js AI not available on server-side')
   }
   
-  // Wait for Puter.js to load if not immediately available
+  // Wait for Puter.js to load if not immediately available - skip if already ready
   if (!isPuterAIAvailable()) {
     console.log('[AI Chat] Puter.js not immediately available, waiting...')
     const puterLoaded = await waitForPuter()
     if (!puterLoaded) {
       throw new Error('Puter.js AI failed to load after waiting')
     }
+  } else {
+    console.log('[AI Chat] Puter.js already available, proceeding immediately')
   }
   
   // Try Puter.js (client-side only)
   try {
     console.log('[AI Chat] Using Puter.js AI')
     const puter = (window as any).puter
-    return await puter.ai.chat(prompt, { model: 'gpt-4o' })
+    
+    // Additional validation
+    if (!puter || !puter.ai || typeof puter.ai.chat !== 'function') {
+      throw new Error('Puter.js AI interface not properly loaded')
+    }
+    
+    const response = await puter.ai.chat(prompt, { model: 'gpt-4o' })
+    
+    // Validate response
+    if (response === null || response === undefined) {
+      throw new Error('Received null or undefined response from Puter.js AI')
+    }
+    
+    return String(response)
   } catch (puterError) {
     console.warn('[AI Chat] Puter.js failed:', puterError)
-    throw new Error(`Puter.js AI error: ${puterError instanceof Error ? puterError.message : String(puterError)}`)
+    
+    // Enhanced error logging
+    if (puterError instanceof Error) {
+      console.error('[AI Chat] Error details:', {
+        name: puterError.name,
+        message: puterError.message,
+        stack: puterError.stack
+      })
+      throw new Error(`Puter.js AI error: ${puterError.message}`)
+    } else {
+      console.error('[AI Chat] Non-Error object:', puterError)
+      throw new Error(`Puter.js AI error: ${String(puterError)}`)
+    }
   }
 }
 
@@ -203,13 +412,15 @@ export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
   }
 }
 
-function getFallbackSuggestions(): string[] {
+function getFallbackSuggestions(jobTitle?: string): string[] {
+  const jobSpecific = jobTitle ? ` yang relevan dengan posisi ${jobTitle}` : ' yang relevan dengan posisi yang dilamar'
+  
   return [
-    "Add more quantifiable achievements with specific numbers and percentages",
-    "Include industry-relevant keywords naturally throughout your experience descriptions",
-    "Use strong action verbs to start each bullet point in your experience section",
-    "Ensure consistent formatting and clear section headers for better ATS parsing",
-    "Add a professional summary that highlights your key qualifications and career goals",
+    `Tambahkan lebih banyak pencapaian yang dapat diukur dengan angka spesifik dan persentase${jobSpecific}`,
+    `Sertakan kata kunci dan technical skills${jobSpecific} untuk meningkatkan ATS compatibility`,
+    "Gunakan kata kerja aktif yang kuat di awal setiap poin pengalaman kerja",
+    "Pastikan format CV konsisten dan mudah dibaca oleh sistem ATS modern",
+    "Tambahkan ringkasan profesional yang menonjolkan kualifikasi utama dan career objective",
   ]
 }
 
@@ -260,6 +471,94 @@ export async function generatePersonalizedSuggestions(cvText: string, targetRole
   }
 }
 
+// HRD-based personalized suggestions with job-specific context
+export async function generateHRDPersonalizedSuggestions(
+  cvText: string, 
+  jobTitle: string = '', 
+  jobDescription: string = ''
+): Promise<string[]> {
+  try {
+    if (!isAIAvailable()) {
+      console.warn("Puter.js AI not available, using fallback suggestions")
+      return getFallbackSuggestions(jobTitle)
+    }
+
+    // Enhanced dynamic prompt with your exact specification
+    const prompt = `kamu adalah HRD yang sedang mencari kandidat, kamu sedang mencari pekerja pada bidang "${jobTitle || 'posisi yang dilamar'}" dengan job desc "${jobDescription || 'sesuai dengan posisi yang tersedia'}" kamu melihat applicant ${cvText} berikan personalized suggestion untuk cv tersebut.
+
+Analisis CV ini secara mendalam dan berikan 5 personalized suggestion yang:
+- SPESIFIK berdasarkan konten CV yang ada
+- ACTIONABLE dan dapat langsung diterapkan
+- RELEVAN dengan job requirement yang diberikan
+- MEMPERTIMBANGKAN gap antara CV dengan job description
+- FOKUS pada improvement yang paling impactful
+
+Berikan tepat 5 personalized suggestion dalam format array JSON:
+["suggestion 1", "suggestion 2", "suggestion 3", "suggestion 4", "suggestion 5"]
+
+Setiap suggestion harus mempertimbangkan:
+1. Gap spesifik antara CV dengan job requirement
+2. Kekuatan yang sudah ada dan bisa ditonjolkan lebih baik
+3. Area improvement yang paling mendesak
+4. Format dan presentasi CV untuk ATS optimization
+5. Keyword dan technical skills yang perlu ditambahkan
+
+Jangan berikan saran generic - buat saran yang benar-benar personal berdasarkan CV dan job yang spesifik ini.`
+
+    console.log("[HRD AI Suggestions] Sending prompt to AI...")
+    console.log("[HRD AI Suggestions] Job Title:", jobTitle || 'Not specified')
+    console.log("[HRD AI Suggestions] Job Description Length:", (jobDescription || '').length, "characters")
+    console.log("[HRD AI Suggestions] CV Text Length:", cvText.length, "characters")
+    
+    const responseText = await aiChat(prompt)
+    
+    console.log("[HRD AI Suggestions] Raw AI Response:", responseText)
+
+    try {
+      // Enhanced response parsing
+      let cleanedText = responseText.trim()
+      
+      // Remove markdown code blocks
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '')
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '')
+      }
+      
+      // Try to extract JSON array if wrapped in additional text
+      const jsonMatch = cleanedText.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        cleanedText = jsonMatch[0]
+      }
+      
+      console.log("[HRD AI Suggestions] Cleaned response:", cleanedText)
+      
+      const suggestions = JSON.parse(cleanedText)
+      
+      // Validate suggestions
+      if (Array.isArray(suggestions) && suggestions.length === 5) {
+        // Ensure all suggestions are strings and not empty
+        const validSuggestions = suggestions.filter(s => typeof s === 'string' && s.trim().length > 0)
+        if (validSuggestions.length === 5) {
+          console.log("[HRD AI Suggestions] ✅ Successfully generated 5 valid suggestions")
+          return validSuggestions
+        }
+      }
+      
+      console.warn("[HRD AI Suggestions] ⚠️ Invalid suggestions format or count:", suggestions)
+      return getFallbackSuggestions(jobTitle)
+      
+    } catch (parseError) {
+      console.error("[HRD AI Suggestions] ❌ Failed to parse AI response:", parseError)
+      console.warn("[HRD AI Suggestions] Raw response that failed to parse:", responseText)
+      return getFallbackSuggestions(jobTitle)
+    }
+  } catch (error) {
+    console.error("[HRD AI Suggestions] ❌ Error generating suggestions:", error)
+    return getFallbackSuggestions(jobTitle)
+  }
+}
+
 // Enhanced AI-powered CV analysis with dynamic scoring
 export async function analyzeWithAIAndScore(cvText: string): Promise<{
   aiAnalysis: AIAnalysisResult
@@ -300,61 +599,119 @@ export async function analyzeWithAIAndScore(cvText: string): Promise<{
   }
 }
 
-// Function to generate random animal facts for AI integration testing
-export async function generateAnimalFacts(): Promise<string[]> {
+
+
+
+
+
+
+// Safe wrapper for Puter.js AI that handles all error cases
+export async function safePuterQuickstart(prompt: string = "Tell me about space"): Promise<string> {
   try {
-    // Check if we're on client-side
-    if (typeof window === 'undefined') {
-      throw new Error("This function must be called from client-side")
-    }
-    
-    console.log("[Animal Facts] 🔄 Waiting for Puter.js to load...")
-    
-    // Use the existing waitForPuter function
-    const isPuterReady = await waitForPuter(25, 200) // Wait up to 5 seconds
-    
-    if (!isPuterReady) {
-      throw new Error("Puter.js AI is not available after waiting. Please try again.")
-    }
-    
-    console.log("[Animal Facts] ✅ Puter.js AI is ready!")
-
-    const prompt = `
-    Generate exactly 5 fascinating and surprising animal facts. Make them educational, interesting, and suitable for all ages.
-    
-    Please provide the facts in the following JSON array format:
-    ["fact 1", "fact 2", "fact 3", "fact 4", "fact 5"]
-    
-    Each fact should be:
-    - Unique and surprising
-    - Educational but fun
-    - About different animals (mammals, birds, reptiles, marine life, insects, etc.)
-    - 1-2 sentences long
-    - Factually accurate
-    - Written in a engaging and interesting way
-    `
-
-    const responseText = await (window as any).puter.ai.chat(prompt, {
-      model: 'gpt-4o'
-    })
-
-    // Strip markdown code blocks if present
-    let cleanedText = responseText.trim()
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '')
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '')
-    }
-
-    const facts = JSON.parse(cleanedText)
-    if (!Array.isArray(facts) || facts.length !== 5) {
-      throw new Error("Invalid response format from AI")
-    }
-    
-    return facts
+    console.log('[Safe Puter Quickstart] Starting with prompt length:', prompt.length)
+    const result = await puterQuickstart(prompt)
+    console.log('[Safe Puter Quickstart] Success, result length:', result.length)
+    return result
   } catch (error) {
-    console.error("[Animal Facts] Generation Error:", error)
-    throw error
+    // Use silent logging to prevent Next.js error boundaries
+    silentLog('[Safe Puter Quickstart] Caught error:', error)
+    silentLog('[Safe Puter Quickstart] Error type:', typeof error)
+    silentLog('[Safe Puter Quickstart] Error constructor:', error?.constructor?.name)
+    
+    // Log additional error details silently
+    if (error && typeof error === 'object') {
+      silentLog('[Safe Puter Quickstart] Error keys:', Object.keys(error))
+      silentLog('[Safe Puter Quickstart] Error values:', Object.values(error))
+    }
+    
+    // Enhanced error message generation - never throw, always return a string
+    
+    // Handle Error instances
+    if (error instanceof Error) {
+      const message = error.message || 'Unknown error occurred'
+      if (message.includes('Chat API error: {}')) {
+        return `❌ Empty Chat Error: Puter.js returned an empty error object. This usually indicates:\n• Network connectivity issues\n• Authentication problems (try logging in to Puter.com)\n• API service unavailability\n\nPlease refresh the page and try again.`
+      }
+      return `❌ Error: ${message}`
+    }
+    
+    // Handle string errors
+    if (typeof error === 'string') {
+      if (error.trim().length === 0) {
+        return `❌ Empty Error: Received an empty error string. Please try again.`
+      }
+      return `❌ Error: ${error}`
+    }
+    
+    // Handle object errors (including empty objects)
+    if (error && typeof error === 'object') {
+      try {
+        const keys = Object.keys(error)
+        const stringified = JSON.stringify(error)
+        
+        if (keys.length === 0 || stringified === '{}' || stringified === 'null') {
+          return `❌ Empty Error Object: Received an empty error object from Puter.js. This typically indicates a network or authentication issue. Please check your connection and Puter.com login status.`
+        }
+        
+        if (stringified && stringified !== '{}') {
+          return `❌ Error object: ${stringified}`
+        }
+        
+        // Try to extract meaningful properties
+        const meaningfulProps = keys.filter(key => {
+          try {
+            const value = (error as any)[key]
+            return value !== null && value !== undefined && value !== ''
+          } catch {
+            return false
+          }
+        })
+        
+        if (meaningfulProps.length > 0) {
+          const propDetails = meaningfulProps.map(key => {
+            try {
+              return `${key}: ${(error as any)[key]}`
+            } catch {
+              return `${key}: [inaccessible]`
+            }
+          }).join(', ')
+          return `❌ Error with properties: ${propDetails}`
+        }
+        
+      } catch (jsonError) {
+        try {
+          console.warn('[Safe Puter Quickstart] JSON stringify failed:', jsonError)
+        } catch {
+          // Even logging failed, just continue
+        }
+      }
+    }
+    
+    // Handle null or undefined
+    if (error === null) {
+      return `❌ Null Error: Received a null error from Puter.js. Please try again.`
+    }
+    
+    if (error === undefined) {
+      return `❌ Undefined Error: Received an undefined error from Puter.js. Please try again.`
+    }
+    
+    // Last resort - try to convert to string
+    try {
+      const errorString = String(error)
+      if (errorString && errorString !== 'undefined' && errorString !== 'null' && errorString !== '[object Object]') {
+        return `❌ Unexpected error (${typeof error}): ${errorString}`
+      }
+    } catch (stringConversionError) {
+      try {
+        console.warn('[Safe Puter Quickstart] String conversion failed:', stringConversionError)
+      } catch {
+        // Even this logging failed
+      }
+    }
+    
+    // Absolute fallback
+    return `❌ An completely unrecognizable error occurred (type: ${typeof error}). Please refresh the page and check if you're running on Puter.com. If the issue persists, try logging out and back in to Puter.com.`
   }
 }
 
@@ -366,31 +723,70 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
       return "❌ This function must be called from client-side (browser environment)"
     }
     
+    // Check if we're actually on Puter.com or a compatible environment
+    const hostname = window.location?.hostname || ''
+    if (!hostname.includes('puter.com') && !hostname.includes('localhost') && !hostname.includes('127.0.0.1')) {
+      return "🌐 Puter.js AI requires running on Puter.com or localhost environment. Current: " + hostname
+    }
+    
     console.log("[Puter Quickstart] 🔄 Checking Puter.js availability...")
     
-    // Direct availability check before waiting
-    const puter = (window as any).puter
+    // Validate browser environment
+    if (!window || typeof window !== 'object') {
+      return "❌ Browser environment not properly available"
+    }
+    
+
+    
+    // Check for Puter.js presence more defensively
+    let puter: any
+    try {
+      puter = (window as any).puter
+    } catch (windowError) {
+      silentLog("[Puter Quickstart] Error accessing window.puter:", windowError)
+      return "❌ Unable to access Puter.js from window object"
+    }
+    
     if (!puter || !puter.ai || typeof puter.ai.chat !== 'function') {
       console.log("[Puter Quickstart] 🔄 Waiting for Puter.js to load...")
       
-      // Use the existing waitForPuter function with enhanced retry logic
-      const isPuterReady = await waitForPuter(30, 200) // Wait up to 6 seconds
+      // Use the existing waitForPuter function with ultra-fast mode
+      const isPuterReady = await waitForPuter(5, 20) // Wait up to 0.1 seconds
       
       if (!isPuterReady) {
         const errorMsg = "⏱️ Puter.js AI is taking longer than expected to load. Please wait and try again."
         console.warn("[Puter Quickstart]", errorMsg)
         return errorMsg
       }
+      
+      // Re-fetch puter after waiting
+      try {
+        puter = (window as any).puter
+      } catch (refetchError) {
+        silentLog("[Puter Quickstart] Error re-fetching puter after wait:", refetchError)
+        return "❌ Unable to access Puter.js after waiting"
+      }
     }
     
     console.log("[Puter Quickstart] ✅ Puter.js AI is ready!")
     
-    console.log("[AI Quickstart] Sending prompt:", prompt)
+    console.log("[AI Quickstart] Sending prompt:", prompt.substring(0, 100) + '...')
     
-    // Send original prompt without JSON formatting requirements
-    const response = await (window as any).puter.ai.chat(prompt, {
-      model: 'gpt-4o'
-    })
+    // Send original prompt with ultra-safe error handling
+    let response: any
+    
+    response = await safeAsyncErrorBoundary(
+      async () => puter.ai.chat(prompt, { model: 'gpt-4o' }),
+      null // fallback value
+    )
+    
+    // If the safe boundary returned null, it means there was an error
+    if (response === null) {
+      // Get more detailed diagnostic information
+      const diagnostic = await diagnosticPuterConnection()
+      
+      return `❌ Puter.js Chat API Error\n\n🔍 Diagnostic Information:\n${diagnostic}\n\n💡 Quick Solutions:\n• Try refreshing the page\n• Check your Puter.com login status\n• Ensure stable internet connection\n• Wait a moment and try again`
+    }
     
     console.log("[AI Quickstart] Raw response:", response)
     console.log("[AI Quickstart] Response type:", typeof response)
@@ -455,7 +851,19 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
     
     return processedResponse
   } catch (error) {
-    console.error("[Puter Quickstart] Error:", error)
+    // Use silent logging to prevent Next.js error boundaries
+    silentLog("[Puter Quickstart] Error:", error)
+    
+    // Enhanced error logging for debugging with silent logging
+    if (error instanceof Error) {
+      silentLog("[Puter Quickstart] Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+    } else {
+      silentLog("[Puter Quickstart] Non-Error object caught:", error)
+    }
     
     // Provide user-friendly error messages with emojis
     if (error instanceof Error) {
@@ -469,9 +877,16 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
         return "🔐 Please log in to your Puter.com account to use AI features."
       } else if (error.message.includes('permission') || error.message.includes('access')) {
         return "🔐 Access denied. Please check your Puter.com account permissions."
-      } else {
+      } else if (error.message) {
         return `❌ AI Error: ${error.message}`
+      } else {
+        return "❌ An unknown error occurred with the AI service. Please try again."
       }
+    }
+    
+    // Handle non-Error objects
+    if (typeof error === 'string') {
+      return `❌ Error: ${error}`
     }
     
     return "❌ An unexpected error occurred. Please try again."
