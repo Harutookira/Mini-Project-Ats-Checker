@@ -20,6 +20,20 @@ declare global {
   }> | undefined
 }
 
+// Type assertion to tell TypeScript that globalThis has our custom property
+const customGlobal = globalThis as typeof globalThis & { cvCache: Map<string, {
+  extractedText: string
+  originalFile?: {
+    buffer: Buffer
+    filename: string
+    mimetype: string
+  }
+  timestamp: number
+  filename: string
+  filesize: number
+  filetype: string
+}> | undefined };
+
 // Function to preserve and normalize bullet points in text
 function preserveBulletPoints(text: string): string {
   if (!text) return text
@@ -211,11 +225,11 @@ export async function POST(request: NextRequest) {
       cacheKey = `cv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       
       // Store in a simple cache object (you can replace this with Redis in production)
-      if (typeof globalThis.cvCache === 'undefined') {
-        globalThis.cvCache = new Map()
+      if (typeof customGlobal.cvCache === 'undefined') {
+        customGlobal.cvCache = new Map()
       }
       
-      globalThis.cvCache.set(cacheKey, {
+      customGlobal.cvCache.set(cacheKey, {
         extractedText,
         originalFile: {
           buffer: originalFileBuffer,
@@ -322,11 +336,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Cache key required" }, { status: 400 })
     }
     
-    if (!globalThis.cvCache) {
+    if (!customGlobal.cvCache) {
       return NextResponse.json({ error: "Cache not initialized" }, { status: 404 })
     }
     
-    const cachedData = globalThis.cvCache.get(cacheKey)
+    const cachedData = customGlobal.cvCache.get(cacheKey)
     
     if (!cachedData) {
       return NextResponse.json({ error: "Cache key not found" }, { status: 404 })
@@ -336,7 +350,7 @@ export async function GET(request: NextRequest) {
     const isExpired = Date.now() - cachedData.timestamp > 3600000
     
     if (isExpired) {
-      globalThis.cvCache.delete(cacheKey)
+      customGlobal.cvCache.delete(cacheKey)
       return NextResponse.json({ error: "Cache expired" }, { status: 404 })
     }
     

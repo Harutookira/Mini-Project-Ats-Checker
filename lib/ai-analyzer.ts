@@ -10,10 +10,19 @@ declare global {
       }
     }
   }
+  
+  // Extend globalThis to include Window properties for server-side access
+  interface Global {
+    puter: {
+      ai: {
+        chat: (prompt: string, options?: { model?: string }) => Promise<string>
+      }
+    } | undefined;
+  }
 }
 
-// Access puter from global scope
-const puter = typeof window !== 'undefined' ? (window as any).puter : null
+// Access puter from global scope with proper typing
+const puter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
 
 // Gemini AI configuration
 const GEMINI_API_KEY = process.env.GOOGLE_API_KEY || '';
@@ -308,10 +317,10 @@ function isPuterAIAvailable(): boolean {
     return false;
   }
   
-  // Immediate check without any delay
+  // Use proper typing instead of 'any'
   try {
-    const puter = (window as any).puter;
-    return !!(puter && puter.ai && typeof puter.ai.chat === 'function');
+    const currentPuter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+    return !!(currentPuter && currentPuter.ai && typeof currentPuter.ai.chat === 'function');
   } catch (error) {
     silentLog('[isPuterAIAvailable] Error accessing window.puter:', error);
     return false;
@@ -336,7 +345,9 @@ async function waitForPuter(maxRetries: number = 5, delay: number = 20): Promise
   }
   
   for (let i = 0; i < maxRetries; i++) {
-    if (isPuterAIAvailable()) {
+    // Use proper typing instead of 'any'
+    const currentPuter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+    if (currentPuter && currentPuter.ai && typeof currentPuter.ai.chat === 'function') {
       return true;
     }
     console.log(`[Puter Wait] Attempt ${i + 1}/${maxRetries} - Waiting for Puter.js to load...`);
@@ -847,117 +858,127 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
 
     
     // Check for Puter.js presence more defensively
-    let puter: any
-    try {
-      puter = (window as any).puter
-    } catch (windowError) {
-      silentLog("[Puter Quickstart] Error accessing window.puter:", windowError)
-      return "❌ Unable to access Puter.js from window object"
-    }
-    
-    if (!puter || !puter.ai || typeof puter.ai.chat !== 'function') {
-      console.log("[Puter Quickstart] 🔄 Waiting for Puter.js to load...")
-      
-      // Use the existing waitForPuter function with ultra-fast mode
-      const isPuterReady = await waitForPuter(5, 20) // Wait up to 0.1 seconds
-      
-      if (!isPuterReady) {
-        const errorMsg = "⏱️ Puter.js AI is taking longer than expected to load. Please wait and try again."
-        console.warn("[Puter Quickstart]", errorMsg)
-        return errorMsg
+    {
+      let puterInstance1: Window['puter'] | undefined;
+      try {
+        puterInstance1 = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+      } catch (windowError) {
+        silentLog("[Puter Quickstart] Error accessing window.puter:", windowError);
+        return "❌ Unable to access Puter.js from window object";
       }
       
-      // Re-fetch puter after waiting
-      try {
-        puter = (window as any).puter
-      } catch (refetchError) {
-        silentLog("[Puter Quickstart] Error re-fetching puter after wait:", refetchError)
-        return "❌ Unable to access Puter.js after waiting"
-      }
-    }
-    
-    console.log("[Puter Quickstart] ✅ Puter.js AI is ready!")
-    
-    console.log("[AI Quickstart] Sending prompt:", prompt.substring(0, 100) + '...')
-    
-    // Send original prompt with ultra-safe error handling
-    let response: any
-    
-    response = await safeAsyncErrorBoundary(
-      async () => puter.ai.chat(prompt, { model: 'gpt-4o' }),
-      null // fallback value
-    )
-    
-    // If the safe boundary returned null, it means there was an error
-    if (response === null) {
-      // Get more detailed diagnostic information
-      const diagnostic = await diagnosticPuterConnection()
-      
-      return `❌ Puter.js Chat API Error\n\n🔍 Diagnostic Information:\n${diagnostic}\n\n💡 Quick Solutions:\n• Try refreshing the page\n• Check your Puter.com login status\n• Ensure stable internet connection\n• Wait a moment and try again`
-    }
-    
-    console.log("[AI Quickstart] Raw response:", response)
-    console.log("[AI Quickstart] Response type:", typeof response)
-    
-    // Extract content from various response formats
-    let processedResponse: string = ""
-    
-    if (typeof response === 'string') {
-      const trimmedResponse = response.trim()
-      
-      try {
-        // Try to parse as JSON to extract content
-        if (trimmedResponse.startsWith('{') || trimmedResponse.startsWith('[')) {
-          // Strip markdown code blocks if present
-          let cleanedResponse = trimmedResponse
-          if (cleanedResponse.startsWith('```json')) {
-            cleanedResponse = cleanedResponse.replace(/```json\s*/, '').replace(/\s*```$/, '')
-          } else if (cleanedResponse.startsWith('```')) {
-            cleanedResponse = cleanedResponse.replace(/```\s*/, '').replace(/\s*```$/, '')
+      if (!puterInstance1 || !puterInstance1.ai || typeof puterInstance1.ai.chat !== 'function') {
+        console.log("[Puter Quickstart] 🔄 Waiting for Puter.js to load...")
+        
+        // Use the existing waitForPuter function with ultra-fast mode
+        const isPuterReady = await waitForPuter(5, 20) // Wait up to 0.1 seconds
+        
+        if (!isPuterReady) {
+          const errorMsg = "⏱️ Puter.js AI is taking longer than expected to load. Please wait and try again."
+          console.warn("[Puter Quickstart]", errorMsg)
+          return errorMsg
+        }
+        
+        // Re-fetch puter after waiting
+        {
+          try {
+            const puterInstance2 = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+          } catch (refetchError) {
+            silentLog("[Puter Quickstart] Error re-fetching puter after wait:", refetchError);
+            return "❌ Unable to access Puter.js after waiting";
           }
-          
-          const parsedResponse = JSON.parse(cleanedResponse)
-          processedResponse = extractContentFromJSON(parsedResponse)
-          
-          if (!processedResponse) {
-            // If no content extracted, use the raw response
+        }
+      }
+      
+      console.log("[Puter Quickstart] ✅ Puter.js AI is ready!")
+      
+      console.log("[AI Quickstart] Sending prompt:", prompt.substring(0, 100) + '...')
+      
+      // Send original prompt with ultra-safe error handling
+      let response: any;
+      
+      // Use proper typing
+      const puterInstance3 = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+      if (!puterInstance3) {
+        return "❌ Puter.js not available";
+      }
+      
+      response = await safeAsyncErrorBoundary(
+        async () => puterInstance3.ai.chat(prompt, { model: 'gpt-4o' }),
+        null // fallback value
+      );
+      
+      // If the safe boundary returned null, it means there was an error
+      if (response === null) {
+        // Get more detailed diagnostic information
+        const diagnostic = await diagnosticPuterConnection()
+        
+        return `❌ Puter.js Chat API Error\n\n🔍 Diagnostic Information:\n${diagnostic}\n\n💡 Quick Solutions:\n• Try refreshing the page\n• Check your Puter.com login status\n• Ensure stable internet connection\n• Wait a moment and try again`
+      }
+      
+      console.log("[AI Quickstart] Raw response:", response)
+      console.log("[AI Quickstart] Response type:", typeof response)
+      
+      // Extract content from various response formats
+      let processedResponse: string = ""
+      
+      if (typeof response === 'string') {
+        const trimmedResponse = response.trim()
+        
+        try {
+          // Try to parse as JSON to extract content
+          if (trimmedResponse.startsWith('{') || trimmedResponse.startsWith('[')) {
+            // Strip markdown code blocks if present
+            let cleanedResponse = trimmedResponse
+            if (cleanedResponse.startsWith('```json')) {
+              cleanedResponse = cleanedResponse.replace(/```json\s*/, '').replace(/\s*```$/, '')
+            } else if (cleanedResponse.startsWith('```')) {
+              cleanedResponse = cleanedResponse.replace(/```\s*/, '').replace(/\s*```$/, '')
+            }
+            
+            const parsedResponse = JSON.parse(cleanedResponse)
+            processedResponse = extractContentFromJSON(parsedResponse)
+            
+            if (!processedResponse) {
+              // If no content extracted, use the raw response
+              processedResponse = trimmedResponse
+            }
+          } else {
+            // Not JSON format, use as plain text
             processedResponse = trimmedResponse
           }
-        } else {
-          // Not JSON format, use as plain text
+        } catch (jsonError) {
+          console.log("[Puter Quickstart] JSON parsing failed, using raw response")
           processedResponse = trimmedResponse
         }
-      } catch (jsonError) {
-        console.log("[Puter Quickstart] JSON parsing failed, using raw response")
-        processedResponse = trimmedResponse
-      }
-    } else if (response !== null && response !== undefined) {
-      // Handle object responses directly
-      if (typeof response === 'object') {
-        processedResponse = extractContentFromJSON(response)
-        
-        if (!processedResponse) {
-          try {
-            processedResponse = JSON.stringify(response, null, 2)
-          } catch (jsonError) {
-            processedResponse = String(response)
+      } else if (response !== null && response !== undefined) {
+        // Handle object responses directly
+        if (typeof response === 'object') {
+          processedResponse = extractContentFromJSON(response)
+          
+          if (!processedResponse) {
+            try {
+              processedResponse = JSON.stringify(response, null, 2)
+            } catch (jsonError) {
+              processedResponse = String(response)
+            }
           }
+        } else {
+          processedResponse = String(response)
         }
       } else {
-        processedResponse = String(response)
+        processedResponse = "No response generated"
       }
-    } else {
-      processedResponse = "No response generated"
+      
+      // Ensure we have a valid response
+      if (!processedResponse || processedResponse.length === 0) {
+        processedResponse = "Empty response received from AI"
+      }
+      
+      console.log("[Puter Quickstart] Final processed response:", processedResponse)
+      
+      return processedResponse
     }
-    
-    // Ensure we have a valid response
-    if (!processedResponse || processedResponse.length === 0) {
-      processedResponse = "Empty response received from AI"
-    }
-    
-    console.log("[Puter Quickstart] Final processed response:", processedResponse)
-    
-    return processedResponse
   } catch (error) {
     // Use silent logging to prevent Next.js error boundaries
     silentLog("[Puter Quickstart] Error:", error)
@@ -1016,10 +1037,13 @@ export async function aiEvaluateCategory(cvText: string, category: string, jobNa
     }
     
     // Wait for any AI service to be ready
-    const isAIReady = await waitForPuter(5, 20) // Wait up to 0.1 seconds
+    const isAIReady = await waitForPuter(5, 20); // Wait up to 0.1 seconds
     
-    if (!isAIReady && !isGeminiAvailable()) {
-      throw new Error("No AI service is available. Please try again in a moment.")
+    // Use proper typing
+    const currentPuter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
+    
+    if (!isAIReady && !isGeminiAvailable() && (!currentPuter || !currentPuter.ai || typeof currentPuter.ai.chat !== 'function')) {
+      throw new Error("No AI service is available. Please try again in a moment.");
     }
     
     console.log(`[AI Category Evaluator] Evaluating category: ${category}`)
