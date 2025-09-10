@@ -13,9 +13,9 @@ const ALLOWED_FILE_TYPES = [
 const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt'];
 
 // Text validation constants
-const MAX_TEXT_LENGTH = 5000;
+const MAX_TEXT_LENGTH = 50000; // Increased from 5000 to 50000
 const MAX_JOB_NAME_LENGTH = 100;
-const MAX_JOB_DESCRIPTION_LENGTH = 2000;
+const MAX_JOB_DESCRIPTION_LENGTH = 20000; // Increased from 2000 to 20000
 
 // Validation error class
 export class ValidationError extends Error {
@@ -165,7 +165,7 @@ export function validateProcessedCVText(text: string): { isValid: boolean; error
   }
 
   // Check text length (allow longer text for processed CVs)
-  const maxLength = MAX_TEXT_LENGTH * 2; // Double the limit for processed CVs
+  const maxLength = MAX_TEXT_LENGTH * 4; // Increased from 2 to 4 (200000 characters)
   if (text.length > maxLength) {
     return { isValid: false, error: `Text exceeds maximum length of ${maxLength} characters` };
   }

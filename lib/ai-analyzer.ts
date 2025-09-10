@@ -79,7 +79,8 @@ export function checkPuterStatus(): string {
     return `🌐 Environment: ${hostname}\n⚠️ Puter.js works best on Puter.com or localhost environments\n💡 Try opening this app on Puter.com for full AI features`
   }
   
-  const puter = (window as any).puter
+  // Use proper typing instead of 'any'
+  const puter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
   
   if (!puter) {
     return `❌ Puter.js not loaded\n💡 Solutions:\n• Make sure you're running on Puter.com\n• Check browser console for script loading errors\n• Refresh the page and wait for Puter.js to load`
@@ -118,8 +119,8 @@ export async function diagnosticPuterConnection(): Promise<string> {
       results.push('✅ Compatible hostname detected')
     }
     
-    // Puter object check
-    const puter = (window as any).puter
+    // Puter object check with proper typing
+    const puter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
     if (!puter) {
       results.push('❌ window.puter not found')
       results.push('')
@@ -198,6 +199,43 @@ export async function diagnosticPuterConnection(): Promise<string> {
 // Import Gemini AI SDK
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
+
+// Maximum text length for AI processing to prevent exceeding API limits
+const MAX_AI_TEXT_LENGTH = 30000; // 30KB limit for AI processing
+
+// Function to truncate text for AI processing while preserving important content
+function truncateTextForAI(text: string, maxLength: number = MAX_AI_TEXT_LENGTH): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  
+  console.log(`[Text Truncation] Original text length: ${text.length}, truncating to ${maxLength}`);
+  
+  // Try to preserve complete sentences by truncating at sentence boundaries
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  let truncatedText = '';
+  
+  for (const sentence of sentences) {
+    if (truncatedText.length + sentence.length <= maxLength - 100) { // Leave some buffer
+      truncatedText += sentence;
+    } else {
+      // If we can't fit a complete sentence, truncate the current sentence
+      if (truncatedText.length < maxLength - 100) {
+        const remainingSpace = maxLength - truncatedText.length - 100;
+        truncatedText += sentence.substring(0, remainingSpace) + '...';
+      }
+      break;
+    }
+  }
+  
+  // Fallback to simple truncation if sentence-based approach didn't work
+  if (truncatedText.length === 0) {
+    truncatedText = text.substring(0, maxLength - 100) + '...';
+  }
+  
+  console.log(`[Text Truncation] Truncated text length: ${truncatedText.length}`);
+  return truncatedText;
+}
 
 // Check if we're in a browser environment
 function isBrowser(): boolean {
@@ -435,11 +473,14 @@ export async function analyzeWithAI(cvText: string): Promise<AIAnalysisResult> {
       return getFallbackAnalysis()
     }
 
+    // Truncate text for AI processing to prevent exceeding API limits
+    const truncatedText = truncateTextForAI(cvText);
+
     const prompt = `
     You are an expert ATS (Applicant Tracking System) consultant and career advisor. Analyze the following CV/resume text and provide detailed insights for ATS optimization and scoring.
 
     CV Text:
-    ${cvText}
+    ${truncatedText}
 
     Please provide a comprehensive analysis in the following JSON format:
     {
@@ -513,11 +554,11 @@ function getFallbackSuggestions(jobTitle?: string): string[] {
   const jobSpecific = jobTitle ? ` yang relevan dengan posisi ${jobTitle}` : ' yang relevan dengan posisi yang dilamar'
   
   return [
-    `Tambahkan lebih banyak pencapaian yang dapat diukur dengan angka spesifik dan persentase${jobSpecific}`,
-    `Sertakan kata kunci dan technical skills${jobSpecific} untuk meningkatkan ATS compatibility`,
+    `Sesuaikan CV dengan kata kunci spesifik dari posisi ${jobTitle || 'yang dilamar'} untuk meningkatkan ATS compatibility`,
+    "Tambahkan lebih banyak pencapaian yang dapat diukur dengan angka spesifik dan persentase",
     "Gunakan kata kerja aktif yang kuat di awal setiap poin pengalaman kerja",
     "Pastikan format CV konsisten dan mudah dibaca oleh sistem ATS modern",
-    "Tambahkan ringkasan profesional yang menonjolkan kualifikasi utama dan career objective",
+    "Sertakan ringkasan profesional yang menonjolkan kualifikasi utama sesuai job requirement",
   ]
 }
 
@@ -530,11 +571,14 @@ export async function generatePersonalizedSuggestions(cvText: string, targetRole
       return getFallbackSuggestions()
     }
 
+    // Truncate text for AI processing to prevent exceeding API limits
+    const truncatedText = truncateTextForAI(cvText);
+
     const prompt = `
     Berdasarkan konten CV ini${targetRole ? ` dan target role "${targetRole}"` : ""}, berikan 5 saran spesifik dan actionable untuk perbaikan:
 
     CV Text:
-    ${cvText}
+    ${truncatedText}
 
     Analisis CV ini secara mendetail dan berikan saran yang:
     1. Spesifik berdasarkan konten CV yang ada
@@ -587,8 +631,12 @@ export async function generateHRDPersonalizedSuggestions(
       return getFallbackSuggestions(jobTitle)
     }
 
+    // Truncate text for AI processing to prevent exceeding API limits
+    const truncatedCVText = truncateTextForAI(cvText);
+    const truncatedJobDesc = truncateTextForAI(jobDescription, 5000); // Smaller limit for job description
+
     // Enhanced dynamic prompt with your exact specification
-    const prompt = `kamu adalah HRD yang sedang mencari kandidat, kamu sedang mencari pekerja pada bidang "${jobTitle || 'posisi yang dilamar'}" dengan job desc "${jobDescription || 'sesuai dengan posisi yang tersedia'}" kamu melihat applicant ${cvText} berikan personalized suggestion untuk cv tersebut.
+    const prompt = `kamu adalah HRD yang sedang mencari kandidat, kamu sedang mencari pekerja pada bidang "${jobTitle || 'posisi yang dilamar'}" dengan job desc "${truncatedJobDesc || 'sesuai dengan posisi yang tersedia'}" kamu melihat applicant ${truncatedCVText} berikan personalized suggestion untuk cv tersebut.
 
 Analisis CV ini secara mendalam dan berikan 5 personalized suggestion yang:
 - SPESIFIK berdasarkan konten CV yang ada
@@ -613,8 +661,8 @@ IMPORTANT: Respond ONLY with the JSON array. Do not include any markdown formatt
 
     console.log("[HRD AI Suggestions] Sending prompt to AI...")
     console.log("[HRD AI Suggestions] Job Title:", jobTitle || 'Not specified')
-    console.log("[HRD AI Suggestions] Job Description Length:", (jobDescription || '').length, "characters")
-    console.log("[HRD AI Suggestions] CV Text Length:", cvText.length, "characters")
+    console.log("[HRD AI Suggestions] Job Description Length:", (truncatedJobDesc || '').length, "characters")
+    console.log("[HRD AI Suggestions] CV Text Length:", truncatedCVText.length, "characters")
     
     const responseText = await aiChat(prompt)
     
@@ -704,12 +752,6 @@ export async function analyzeWithAIAndScore(cvText: string): Promise<{
     }
   }
 }
-
-
-
-
-
-
 
 // Safe wrapper for Puter.js AI that handles all error cases
 export async function safePuterQuickstart(prompt: string = "Tell me about space"): Promise<string> {
@@ -957,492 +999,28 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
           processedResponse = extractContentFromJSON(response)
           
           if (!processedResponse) {
-            try {
-              processedResponse = JSON.stringify(response, null, 2)
-            } catch (jsonError) {
-              processedResponse = String(response)
-            }
+            // If no content extracted, convert to string
+            processedResponse = String(response)
           }
         } else {
+          // Handle non-string, non-object responses
           processedResponse = String(response)
         }
       } else {
-        processedResponse = "No response generated"
+        // Handle null/undefined responses
+        processedResponse = "No response received from AI service"
       }
       
-      // Ensure we have a valid response
+      // Final validation
       if (!processedResponse || processedResponse.length === 0) {
-        processedResponse = "Empty response received from AI"
+        return "Empty response received from AI service"
       }
-      
-      console.log("[Puter Quickstart] Final processed response:", processedResponse)
       
       return processedResponse
     }
   } catch (error) {
-    // Use silent logging to prevent Next.js error boundaries
-    silentLog("[Puter Quickstart] Error:", error)
-    
-    // Enhanced error logging for debugging with silent logging
-    if (error instanceof Error) {
-      silentLog("[Puter Quickstart] Error details:", {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      })
-    } else {
-      silentLog("[Puter Quickstart] Non-Error object caught:", error)
-    }
-    
-    // Provide user-friendly error messages with emojis
-    if (error instanceof Error) {
-      if (error.message.includes('not available') || error.message.includes('not loaded')) {
-        return "⏱️ Puter.js AI is still loading. Please wait a moment and try again."
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        return "🌐 Network issue detected. Please check your connection and try again."
-      } else if (error.message.includes('quota') || error.message.includes('limit')) {
-        return "🚫 API quota reached. Please try again later."
-      } else if (error.message.includes('authentication') || error.message.includes('auth') || error.message.includes('Not logged in')) {
-        return "🔐 Please log in to your Puter.com account to use AI features."
-      } else if (error.message.includes('permission') || error.message.includes('access')) {
-        return "🔐 Access denied. Please check your Puter.com account permissions."
-      } else if (error.message) {
-        return `❌ AI Error: ${error.message}`
-      } else {
-        return "❌ An unknown error occurred with the AI service. Please try again."
-      }
-    }
-    
-    // Handle non-Error objects
-    if (typeof error === 'string') {
-      return `❌ Error: ${error}`
-    }
-    
-    return "❌ An unexpected error occurred. Please try again."
-  }
-}
-
-// AI-powered individual category evaluation function
-export async function aiEvaluateCategory(cvText: string, category: string, jobName: string = '', jobDescription: string = ''): Promise<{
-  category: string
-  score: number
-  status: "excellent" | "good" | "needs-improvement" | "poor"
-  issues: string[]
-  recommendations: string[]
-}> {
-  try {
-    // Check if we're on client-side
-    if (typeof window === 'undefined') {
-      throw new Error("AI Category Evaluator must be called from client-side")
-    }
-    
-    // Wait for any AI service to be ready
-    const isAIReady = await waitForPuter(5, 20); // Wait up to 0.1 seconds
-    
-    // Use proper typing
-    const currentPuter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
-    
-    if (!isAIReady && !isGeminiAvailable() && (!currentPuter || !currentPuter.ai || typeof currentPuter.ai.chat !== 'function')) {
-      throw new Error("No AI service is available. Please try again in a moment.");
-    }
-    
-    console.log(`[AI Category Evaluator] Evaluating category: ${category}`)
-    
-    let prompt = ""
-    
-    switch (category) {
-      case "Dampak Kuantitatif":
-        prompt = `Kamu adalah HRD yang melakukan pengecekan terhadap CV ATS. Evaluasi CV berikut berdasarkan Dampak Kuantitatif:
-
-CV Text:
-${cvText}
-
-Job Name: ${jobName || 'Tidak disediakan'}
-Job Description: ${jobDescription || 'Tidak disediakan'}
-
-Evaluasi berdasarkan:
-- Apakah CV menunjukkan pengalaman kerja dan project yang relevan dengan posisi?
-- Adakah angka/metrik yang spesifik (contoh: 25% improvement, 10+ projects, $100K revenue)?
-- Seberapa relevan pengalaman dengan job description?
-- Apakah ada pencapaian yang terukur?
-
-Berikan penilaian dalam format JSON:
-{
-  "score": 0-100,
-  "status": "excellent/good/needs-improvement/poor",
-  "issues": ["daftar masalah yang ditemukan"],
-  "recommendations": ["daftar saran perbaikan"]
-}`
-        break
-        
-      case "Panjang CV":
-        prompt = `Kamu adalah HRD yang melakukan pengecekan terhadap CV ATS. Evaluasi CV berikut berdasarkan Panjang CV:
-
-CV Text:
-${cvText}
-
-Job Name: ${jobName || 'Tidak disediakan'}
-Job Description: ${jobDescription || 'Tidak disediakan'}
-
-Evaluasi berdasarkan:
-- Apakah panjang CV sudah optimal (ideal 200-600 kata)?
-- Tidak terlalu pendek atau terlalu panjang?
-- Sesuai dengan level posisi yang dilamar?
-- Konten proporsional dengan pengalaman?
-
-Berikan penilaian dalam format JSON:
-{
-  "score": 0-100,
-  "status": "excellent/good/needs-improvement/poor",
-  "issues": ["daftar masalah yang ditemukan"],
-  "recommendations": ["daftar saran perbaikan"]
-}`
-        break
-        
-      case "Kelengkapan CV":
-        prompt = `Kamu adalah HRD yang melakukan pengecekan terhadap CV ATS. Evaluasi CV berikut berdasarkan Kelengkapan CV:
-
-CV Text:
-${cvText}
-
-Job Name: ${jobName || 'Tidak disediakan'}
-Job Description: ${jobDescription || 'Tidak disediakan'}
-
-Evaluasi berdasarkan:
-- Apakah CV memiliki semua bagian penting (kontak, pengalaman, pendidikan, skills)?
-- Informasi kontak lengkap dan jelas?
-- Struktur CV rapi dan terorganisir?
-- Bagian-bagian yang masih kurang?
-
-Berikan penilaian dalam format JSON:
-{
-  "score": 0-100,
-  "status": "excellent/good/needs-improvement/poor",
-  "issues": ["daftar masalah yang ditemukan"],
-  "recommendations": ["daftar saran perbaikan"]
-}`
-        break
-        
-      case "Kata Kunci Sesuai Job":
-        prompt = `Kamu adalah HRD yang melakukan pengecekan terhadap CV ATS. Evaluasi CV berikut berdasarkan Kata Kunci Sesuai Job:
-
-CV Text:
-${cvText}
-
-Job Name: ${jobName || 'Tidak disediakan'}
-Job Description: ${jobDescription || 'Tidak disediakan'}
-
-Evaluasi berdasarkan:
-- Apakah CV menggunakan kata kunci yang sesuai dengan job description?
-- Apakah ada technical skills yang relevan?
-- Penggunaan action verbs yang tepat?
-- Matching dengan requirement posisi?
-
-Berikan penilaian dalam format JSON:
-{
-  "score": 0-100,
-  "status": "excellent/good/needs-improvement/poor",
-  "issues": ["daftar masalah yang ditemukan"],
-  "recommendations": ["daftar saran perbaikan"]
-}`
-        break
-        
-      default:
-        throw new Error(`Unknown category: ${category}`)
-    }
-
-    const response = await aiChat(prompt)
-    
-    console.log(`[AI Category Evaluator] Raw response for ${category}:`, response)
-    
-    // Extract and parse the JSON response
-    let processedResponse: string = ""
-    
-    if (typeof response === 'string') {
-      const trimmedResponse = response.trim()
-      
-      try {
-        // Try to parse as JSON to extract content
-        if (trimmedResponse.startsWith('{') || trimmedResponse.startsWith('[')) {
-          // Strip markdown code blocks if present
-          let cleanedResponse = trimmedResponse
-          if (cleanedResponse.startsWith('```json')) {
-            cleanedResponse = cleanedResponse.replace(/```json\s*/, '').replace(/\s*```$/, '')
-          } else if (cleanedResponse.startsWith('```')) {
-            cleanedResponse = cleanedResponse.replace(/```\s*/, '').replace(/\s*```$/, '')
-          }
-          
-          const parsedResponse = JSON.parse(cleanedResponse)
-          
-          // Extract content field if it exists, otherwise use the parsed response
-          if (parsedResponse.content) {
-            processedResponse = parsedResponse.content
-          } else {
-            // If it's already the evaluation result, use it directly
-            if (parsedResponse.score !== undefined) {
-              console.log(`[AI Category Evaluator] Successfully parsed ${category} evaluation result`)
-              return {
-                category,
-                score: parsedResponse.score,
-                status: parsedResponse.status,
-                issues: parsedResponse.issues || [],
-                recommendations: parsedResponse.recommendations || []
-              }
-            } else {
-              processedResponse = cleanedResponse
-            }
-          }
-        } else {
-          processedResponse = trimmedResponse
-        }
-      } catch (jsonError) {
-        console.log(`[AI Category Evaluator] JSON parsing failed for ${category}, trying to extract JSON from text`)
-        processedResponse = trimmedResponse
-      }
-    } else if (response !== null && response !== undefined) {
-      if (typeof response === 'object') {
-        // If it's already an object with evaluation results
-        if ((response as any).score !== undefined) {
-          return {
-            category,
-            score: (response as any).score,
-            status: (response as any).status,
-            issues: (response as any).issues || [],
-            recommendations: (response as any).recommendations || []
-          }
-        } else {
-          processedResponse = extractContentFromJSON(response)
-        }
-      } else {
-        processedResponse = String(response)
-      }
-    }
-    
-    // Try to parse the processed response as JSON
-    try {
-      const evaluation = JSON.parse(processedResponse)
-      console.log(`[AI Category Evaluator] Successfully extracted ${category} evaluation:`, evaluation)
-      return {
-        category,
-        score: evaluation.score || 75,
-        status: evaluation.status || 'needs-improvement',
-        issues: evaluation.issues || [`Failed to evaluate ${category}`],
-        recommendations: evaluation.recommendations || [`Please review ${category} section`]
-      }
-    } catch (finalParseError) {
-      console.error(`[AI Category Evaluator] Failed to parse ${category} evaluation response:`, finalParseError)
-      throw new Error(`Failed to parse AI ${category} evaluation response`)
-    }
-    
-  } catch (error) {
-    console.error(`[AI Category Evaluator] Error evaluating ${category}:`, error)
-    throw error
-  }
-}
-
-export async function aiEvaluateCV(cvText: string, jobName: string = '', jobDescription: string = ''): Promise<{
-  results: Array<{
-    category: string
-    score: number
-    status: "excellent" | "good" | "needs-improvement" | "poor"
-    issues: string[]
-    recommendations: string[]
-  }>
-  overallScore: number
-  aiExplanation: string
-}> {
-  try {
-    // Check for any available AI service
-    const hasAI = isAIAvailable() || isGeminiAvailable();
-    if (!hasAI) {
-      throw new Error("No AI service available")
-    }
-    
-    console.log("[AI CV Evaluator] Starting AI-based evaluation")
-    
-    const prompt = `Kamu adalah HRD yang melakukan pengecekan terhadap CV ATS. Kamu mengecek CV berikut:
-
-${cvText}
-
-yang akan di-compare dengan:
-- Nama Pekerjaan: ${jobName || 'Tidak disediakan'}
-- Deskripsi Pekerjaan: ${jobDescription || 'Tidak disediakan'}
-
-Lakukan analisis terhadap 4 kategori diantaranya:
-
-1. **Dampak Kuantitatif** (25% bobot): 
-   - Relevansi pengalaman kerja dan project dengan posisi
-   - Adakah angka/metrik yang spesifik (contoh: 25% improvement, 10+ projects, $100K revenue)
-   - Pencapaian terukur dan impact yang jelas
-
-2. **Panjang CV** (20% bobot):
-   - Optimal 200-600 kata untuk level yang sesuai
-   - Tidak terlalu pendek atau terlalu panjang
-   - Proporsi konten dengan pengalaman
-   - Penggunaan kata baku dan formal
-
-3. **Kelengkapan CV** (30% bobot):
-   - Informasi kontak lengkap (email, telepon, alamat)
-   - Struktur CV yang terorganisir (summary, experience, education, skills)
-   - Bagian-bagian penting yang tidak boleh hilang
-   - Format yang rapi dan profesional
-
-4. **Kata Kunci Sesuai Job** (25% bobot):
-   ${jobDescription ? `- WAJIB: Bandingkan CV secara detail dengan job description berikut: "${jobDescription}"
-   - Hitung persentase kata kunci yang cocok (contoh: jika ada 20 kata kunci penting dalam job desc dan CV mengandung 12 di antaranya = 60%)
-   - Identifikasi technical skills spesifik yang diminta vs yang ada di CV
-   - Cek action verbs dan industry terms yang sesuai dengan requirement
-   - Berikan feedback spesifik tentang gap keywords yang hilang` : `- Matching dengan requirement job description yang tersedia
-   - Technical skills yang relevan
-   - Action verbs yang tepat
-   - Industry-specific terminology`}
-
-Berikan penilaian dalam format JSON berikut dengan skor masing-masing kategori dan skor total:
-{
-  "categoryScores": {
-    "dampakKuantitatif": {
-      "score": 0-100,
-      "weight": 25,
-      "weightedScore": "calculated",
-      "status": "excellent/good/needs-improvement/poor"
-    },
-    "panjangCV": {
-      "score": 0-100,
-      "weight": 20,
-      "weightedScore": "calculated",
-      "status": "excellent/good/needs-improvement/poor"
-    },
-    "kelengkapanCV": {
-      "score": 0-100,
-      "weight": 30,
-      "weightedScore": "calculated",
-      "status": "excellent/good/needs-improvement/poor"
-    },
-    "kataKunciSesuaiJob": {
-      "score": 0-100,
-      "weight": 25,
-      "weightedScore": "calculated",
-      "status": "excellent/good/needs-improvement/poor"
-    }
-  },
-  "totalScore": 0-100,
-  "grade": "A+/A/A-/B+/B/B-/C+/C/C-/D/F",
-  "results": [
-    {
-      "category": "Dampak Kuantitatif",
-      "score": 0-100,
-      "status": "excellent/good/needs-improvement/poor",
-      "issues": ["daftar masalah yang ditemukan"],
-      "recommendations": ["daftar saran perbaikan"]
-    },
-    {
-      "category": "Panjang CV",
-      "score": 0-100,
-      "status": "excellent/good/needs-improvement/poor", 
-      "issues": ["daftar masalah yang ditemukan"],
-      "recommendations": ["daftar saran perbaikan"]
-    },
-    {
-      "category": "Kelengkapan CV",
-      "score": 0-100,
-      "status": "excellent/good/needs-improvement/poor",
-      "issues": ["daftar masalah yang ditemukan"],
-      "recommendations": ["daftar saran perbaikan"]
-    },
-    {
-      "category": "Kata Kunci Sesuai Job",
-      "score": 0-100,
-      "status": "excellent/good/needs-improvement/poor",
-      "issues": ["daftar masalah yang ditemukan"],
-      "recommendations": ["daftar saran perbaikan"]
-    }
-  ],
-  "overallScore": 0-100,
-  "aiExplanation": "Penjelasan komprehensif tentang evaluasi keseluruhan, skor per kategori, dan saran prioritas utama"
-}
-
-Pastikan semua skor adalah angka dari 0-100, dan status sesuai dengan rentang:
-- excellent: 85-100 (Grade A)
-- good: 70-84 (Grade B)
-- needs-improvement: 50-69 (Grade C)
-- poor: 0-49 (Grade D-F)
-
-${jobDescription ? `PENTING untuk kategori "Kata Kunci Sesuai Job":
-- Ekstrak semua kata kunci penting dari job description (minimum 4 huruf, bukan kata umum)
-- Hitung berapa persen yang ada di CV
-- Skor = persentase keyword match (0-100)
-- Berikan feedback spesifik tentang technical skills dan action verbs yang hilang
-
-` : ''}Hitung weighted score untuk setiap kategori dan berikan total score yang akurat.`
-
-    const response = await aiChat(prompt)
-    
-    console.log("[AI CV Evaluator] Raw response:", response)
-    
-    // Extract and parse the JSON response
-    let processedResponse: string = ""
-    
-    if (typeof response === 'string') {
-      const trimmedResponse = response.trim()
-      
-      try {
-        // Try to parse as JSON to extract content
-        if (trimmedResponse.startsWith('{') || trimmedResponse.startsWith('[')) {
-          // Strip markdown code blocks if present
-          let cleanedResponse = trimmedResponse
-          if (cleanedResponse.startsWith('```json')) {
-            cleanedResponse = cleanedResponse.replace(/```json\s*/, '').replace(/\s*```$/, '')
-          } else if (cleanedResponse.startsWith('```')) {
-            cleanedResponse = cleanedResponse.replace(/```\s*/, '').replace(/\s*```$/, '')
-          }
-          
-          const parsedResponse = JSON.parse(cleanedResponse)
-          
-          // Extract content field if it exists, otherwise use the parsed response
-          if (parsedResponse.content) {
-            processedResponse = parsedResponse.content
-          } else {
-            // If it's already the evaluation result, use it directly
-            if (parsedResponse.results && parsedResponse.overallScore !== undefined) {
-              console.log("[AI CV Evaluator] Successfully parsed evaluation result")
-              return parsedResponse
-            } else {
-              processedResponse = cleanedResponse
-            }
-          }
-        } else {
-          processedResponse = trimmedResponse
-        }
-      } catch (jsonError) {
-        console.log("[AI CV Evaluator] JSON parsing failed, trying to extract JSON from text")
-        processedResponse = trimmedResponse
-      }
-    } else if (response !== null && response !== undefined) {
-      if (typeof response === 'object') {
-        // If it's already an object with evaluation results
-        if ((response as any).results && (response as any).overallScore !== undefined) {
-          return response as any
-        } else {
-          processedResponse = extractContentFromJSON(response)
-        }
-      } else {
-        processedResponse = String(response)
-      }
-    }
-    
-    // Try to parse the processed response as JSON
-    try {
-      const evaluation = JSON.parse(processedResponse)
-      console.log("[AI CV Evaluator] Successfully extracted evaluation:", evaluation)
-      return evaluation
-    } catch (finalParseError) {
-      console.error("[AI CV Evaluator] Failed to parse evaluation response:", finalParseError)
-      throw new Error("Failed to parse AI evaluation response")
-    }
-    
-  } catch (error) {
-    console.error("[AI CV Evaluator] Error:", error)
-    throw error
+    console.error("[Puter Quickstart] Critical error:", error)
+    return `❌ Critical Error: ${error instanceof Error ? error.message : String(error)}`
   }
 }
 
