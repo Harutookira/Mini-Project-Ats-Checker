@@ -455,7 +455,7 @@ export function analyzeJobKeywords(parsedCV: ParsedCV, jobDescription: string = 
   if (!jobDescription && !jobName) {
     issues.push("Tidak ada informasi pekerjaan target untuk analisis keyword")
     recommendations.push("Masukkan nama pekerjaan dan deskripsi untuk analisis yang lebih akurat")
-    score = 50 // Give base score when no job info provided
+    score = 0 // Give 0 score when no job info provided as requested
   } else {
     // Enhanced keyword extraction with better filtering
     const stopWords = new Set([

@@ -298,8 +298,20 @@ export default function ResultsPage() {
         const errorMessage = responseData.error || "Unknown error";
         const errorDetails = responseData.details || "";
         const solution = responseData.solution || "";
+        const pattern = responseData.pattern || "";
         
-        throw new Error(`${errorMessage}${errorDetails ? `: ${errorDetails}` : ''}${solution ? `\n\nSolution: ${solution}` : ''}`);
+        let fullErrorMessage = errorMessage;
+        if (pattern) {
+          fullErrorMessage += ` (Pattern detected: ${pattern})`;
+        }
+        if (errorDetails) {
+          fullErrorMessage += `: ${errorDetails}`;
+        }
+        if (solution) {
+          fullErrorMessage += `\n\nSolution: ${solution}`;
+        }
+        
+        throw new Error(fullErrorMessage);
       }
       
       const result = responseData.result || "No response from AI";
@@ -328,7 +340,23 @@ export default function ResultsPage() {
         console.error('Non-Error object caught:', error);
       }
       
-      setPuterResult(`❌ ${errorMessage}\n\nTroubleshooting:\n• Check your internet connection\n• Ensure the API server is running\n• Check browser console for errors\n• Verify that the GOOGLE_API_KEY environment variable is set in your Vercel deployment settings`);
+      // Provide more specific troubleshooting based on error type
+      let troubleshooting = "Troubleshooting:\n";
+      if (errorMessage.includes("malicious content")) {
+        troubleshooting += "• The CV text contains patterns that were flagged as potentially unsafe\n";
+        troubleshooting += "• This is a security feature to prevent XSS and SQL injection attacks\n";
+        troubleshooting += "• The system detected patterns like SQL comments or terminators in your CV\n";
+        troubleshooting += "• This commonly happens with processed CV text that contains semicolons or comment-like patterns\n";
+        troubleshooting += "• The text has already been sanitized but still contains flagged patterns\n";
+        troubleshooting += "• Try analyzing a different CV or modify the current CV content\n\n";
+      }
+      troubleshooting += "General troubleshooting:\n";
+      troubleshooting += "• Check your internet connection\n";
+      troubleshooting += "• Ensure the API server is running\n";
+      troubleshooting += "• Check browser console for errors\n";
+      troubleshooting += "• Verify that the GOOGLE_API_KEY environment variable is set in your Vercel deployment settings";
+      
+      setPuterResult(`❌ ${errorMessage}\n\n${troubleshooting}`);
       setShowPuter(true);
     } finally {
       setIsLoadingPuter(false);

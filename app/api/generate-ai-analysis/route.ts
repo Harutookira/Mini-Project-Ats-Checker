@@ -3,9 +3,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
+import { validateText, validateProcessedCVText, isRateLimited, sanitizeText } from '@/lib/input-validator';
+
+// Pre-process CV text to remove common patterns that might be flagged by validation
+function preprocessCVText(text: string): string {
+  // Remove or escape common patterns that might be flagged
+  let processedText = text;
+  
+  // Replace standalone semicolons that might be flagged
+  // But preserve semicolons in contexts that are clearly not SQL
+  processedText = processedText.replace(/;\s*([A-Z])/g, "; $1"); // Add space after semicolon if followed by capital letter
+  
+  // Remove excessive whitespace that might contribute to patterns
+  processedText = processedText.replace(/\s+/g, ' ');
+  
+  // Trim the text
+  processedText = processedText.trim();
+  
+  return processedText;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - check if the client is making too many requests
+    const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (isRateLimited(clientIP)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     // Check if API key is available
     if (!process.env.GOOGLE_API_KEY) {
       console.error("GOOGLE_API_KEY is not set in environment variables");
@@ -18,11 +43,59 @@ export async function POST(request: NextRequest) {
 
     const { cvText, jobName, jobDescription, customPrompt } = await request.json();
 
-    if (!cvText && !customPrompt) {
+    // Sanitize inputs to prevent XSS
+    let sanitizedCvText = '';
+    let sanitizedJobName = '';
+    let sanitizedJobDescription = '';
+    let sanitizedCustomPrompt = '';
+
+    if (cvText) {
+      sanitizedCvText = sanitizeText(cvText);
+      // Pre-process CV text to reduce false positives
+      sanitizedCvText = preprocessCVText(sanitizedCvText);
+      // Validate CV text with specialized function for processed CV text
+      const cvTextValidation = validateProcessedCVText(sanitizedCvText);
+      if (!cvTextValidation.isValid) {
+        return NextResponse.json({ 
+          error: cvTextValidation.error,
+          pattern: cvTextValidation.pattern
+        }, { status: 400 });
+      }
+    }
+
+    if (jobName) {
+      sanitizedJobName = sanitizeText(jobName);
+    }
+
+    if (jobDescription) {
+      sanitizedJobDescription = sanitizeText(jobDescription);
+      // Validate job description
+      const jobDescriptionValidation = validateText(sanitizedJobDescription, 2000);
+      if (!jobDescriptionValidation.isValid) {
+        return NextResponse.json({ 
+          error: jobDescriptionValidation.error,
+          pattern: jobDescriptionValidation.pattern
+        }, { status: 400 });
+      }
+    }
+
+    if (customPrompt) {
+      sanitizedCustomPrompt = sanitizeText(customPrompt);
+      // Validate custom prompt
+      const customPromptValidation = validateText(sanitizedCustomPrompt);
+      if (!customPromptValidation.isValid) {
+        return NextResponse.json({ 
+          error: customPromptValidation.error,
+          pattern: customPromptValidation.pattern
+        }, { status: 400 });
+      }
+    }
+
+    if (!sanitizedCvText && !sanitizedCustomPrompt) {
       return NextResponse.json({ error: "CV text or custom prompt is required" }, { status: 400 });
     }
 
-    let prompt = customPrompt;
+    let prompt = sanitizedCustomPrompt;
 
     if (!prompt) {
       // Buat prompt default jika tidak ada custom prompt
@@ -30,12 +103,12 @@ export async function POST(request: NextRequest) {
       
       CV TEXT:
       ---
-      ${cvText}
+      ${sanitizedCvText}
       ---
       
       TARGET PEKERJAAN:
-      - Nama Pekerjaan: ${jobName || "Tidak spesifik"}
-      - Deskripsi Pekerjaan: ${jobDescription || "Tidak spesifik"}
+      - Nama Pekerjaan: ${sanitizedJobName || "Tidak spesifik"}
+      - Deskripsi Pekerjaan: ${sanitizedJobDescription || "Tidak spesifik"}
       
       Tugas Anda:
       Berikan analisis komprehensif dalam format yang mudah dibaca. Sertakan:

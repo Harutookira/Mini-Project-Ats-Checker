@@ -14,7 +14,30 @@ export default function HomePage() {
   const [isUploading, setIsUploading] = useState(false)
   const [jobName, setJobName] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [errors, setErrors] = useState<{jobName?: string, jobDescription?: string}>({})
   const router = useRouter()
+
+  // Client-side validation functions
+  const validateJobName = (name: string): string | null => {
+    if (name && name.length > 100) {
+      return "Job name must be less than 100 characters";
+    }
+    
+    // Check for potentially dangerous characters
+    if (/[<>{}[\]()'"\\]/.test(name)) {
+      return "Job name contains invalid characters";
+    }
+    
+    return null;
+  }
+
+  const validateJobDescription = (description: string): string | null => {
+    if (description && description.length > 2000) {
+      return "Job description must be less than 2000 characters";
+    }
+    
+    return null;
+  }
 
   const handleFileSelect = (selectedFile: File) => {
     const allowedTypes = [
@@ -47,7 +70,37 @@ export default function HomePage() {
     }
   }
 
+  const handleJobNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setJobName(value);
+    
+    // Validate on change
+    const error = validateJobName(value);
+    setErrors(prev => ({ ...prev, jobName: error || undefined }));
+  }
+
+  const handleJobDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setJobDescription(value);
+    
+    // Validate on change
+    const error = validateJobDescription(value);
+    setErrors(prev => ({ ...prev, jobDescription: error || undefined }));
+  }
+
   const handleATSCheck = async () => {
+    // Validate inputs before submission
+    const jobNameError = validateJobName(jobName);
+    const jobDescriptionError = validateJobDescription(jobDescription);
+    
+    if (jobNameError || jobDescriptionError) {
+      setErrors({
+        jobName: jobNameError || undefined,
+        jobDescription: jobDescriptionError || undefined
+      });
+      return;
+    }
+    
     if (!file) return
 
     setIsUploading(true)
@@ -64,7 +117,8 @@ export default function HomePage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to analyze CV")
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to analyze CV")
       }
 
       const result = await response.json()
@@ -88,7 +142,7 @@ export default function HomePage() {
       router.push("/results")
     } catch (error) {
       console.error("Analysis failed:", error)
-      alert("Failed to analyze CV. Please try again.")
+      alert(error instanceof Error ? error.message : "Failed to analyze CV. Please try again.")
     } finally {
       setIsUploading(false)
     }
@@ -132,10 +186,15 @@ export default function HomePage() {
                 <input
                   type="text"
                   value={jobName}
-                  onChange={(e) => setJobName(e.target.value)}
+                  onChange={handleJobNameChange}
                   placeholder="e.g., Frontend Developer, Data Analyst, Marketing Manager"
-                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  className={`w-full px-3 py-2 border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                    errors.jobName ? "border-red-500 focus:ring-red-500" : "border-input focus:ring-primary"
+                  }`}
                 />
+                {errors.jobName && (
+                  <p className="mt-1 text-sm text-red-500">{errors.jobName}</p>
+                )}
               </CardContent>
             </Card>
 
@@ -147,11 +206,16 @@ export default function HomePage() {
               <CardContent>
                 <textarea
                   value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
+                  onChange={handleJobDescriptionChange}
                   placeholder="Paste key requirements, skills, and responsibilities from the job posting..."
                   rows={4}
-                  className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  className={`w-full px-3 py-2 border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 resize-none ${
+                    errors.jobDescription ? "border-red-500 focus:ring-red-500" : "border-input focus:ring-primary"
+                  }`}
                 />
+                {errors.jobDescription && (
+                  <p className="mt-1 text-sm text-red-500">{errors.jobDescription}</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -220,7 +284,7 @@ export default function HomePage() {
 
               <Button
                 onClick={handleATSCheck}
-                disabled={!file || isUploading}
+                disabled={!file || isUploading || !!errors.jobName || !!errors.jobDescription}
                 className="w-full mt-6 bg-primary hover:bg-primary/90 text-primary-foreground"
                 size="lg"
               >

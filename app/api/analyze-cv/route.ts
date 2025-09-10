@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { analyzeCV } from "@/lib/cv-analyzer"
 import { analyzeWithAI, generatePersonalizedSuggestions, generateHRDPersonalizedSuggestions } from "@/lib/ai-analyzer"
 import * as mammoth from "mammoth"
+import { validateFile, validateJobName, validateJobDescription, isRateLimited, sanitizeText } from "@/lib/input-validator"
 
 // Global cache type declaration
 declare global {
@@ -99,13 +100,46 @@ function preserveBulletPoints(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - check if the client is making too many requests
+    const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (isRateLimited(clientIP)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const formData = await request.formData()
     const file = formData.get("file") as File
-    const jobName = formData.get("jobName") as string || ''
-    const jobDescription = formData.get("jobDescription") as string || ''
+    let jobName = formData.get("jobName") as string || ''
+    let jobDescription = formData.get("jobDescription") as string || ''
 
+    // Sanitize inputs to prevent XSS
+    jobName = sanitizeText(jobName)
+    jobDescription = sanitizeText(jobDescription)
+
+    // Validate inputs
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
+    }
+
+    // Validate file with enhanced security checks
+    const fileValidation = validateFile(file)
+    if (!fileValidation.isValid) {
+      return NextResponse.json({ error: fileValidation.error }, { status: 400 })
+    }
+
+    // Validate job name if provided
+    if (jobName) {
+      const jobNameValidation = validateJobName(jobName)
+      if (!jobNameValidation.isValid) {
+        return NextResponse.json({ error: jobNameValidation.error }, { status: 400 })
+      }
+    }
+
+    // Validate job description if provided
+    if (jobDescription) {
+      const jobDescriptionValidation = validateJobDescription(jobDescription)
+      if (!jobDescriptionValidation.isValid) {
+        return NextResponse.json({ error: jobDescriptionValidation.error }, { status: 400 })
+      }
     }
 
     // Check file type
@@ -275,6 +309,12 @@ export async function POST(request: NextRequest) {
 // GET endpoint to retrieve cached CV data
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting for GET requests too
+    const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    if (isRateLimited(clientIP)) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const { searchParams } = new URL(request.url)
     const cacheKey = searchParams.get('key')
     
@@ -300,6 +340,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Cache expired" }, { status: 404 })
     }
     
+    // Convert buffer to base64 for transmission
+    const base64Buffer = cachedData.originalFile?.buffer ? 
+      cachedData.originalFile.buffer.toString('base64') : 
+      null;
+    
     return NextResponse.json({
       success: true,
       data: {
@@ -307,7 +352,12 @@ export async function GET(request: NextRequest) {
         filesize: cachedData.filesize,
         filetype: cachedData.filetype,
         timestamp: cachedData.timestamp,
-        extractedText: cachedData.extractedText
+        extractedText: cachedData.extractedText,
+        originalFile: base64Buffer ? {
+          buffer: base64Buffer,
+          filename: cachedData.originalFile?.filename,
+          mimetype: cachedData.originalFile?.mimetype
+        } : null
       }
     })
     
