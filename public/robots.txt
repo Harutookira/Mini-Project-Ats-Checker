@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ats-checker.cnt-recruitment.com/sitemap.xml

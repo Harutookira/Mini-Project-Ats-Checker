@@ -143,43 +143,50 @@ export function analyzeParsing(parsedCV: ParsedCV): CVAnalysisResult {
 }
 
 // New ATS evaluation based on 5 criteria
-export function analyzeQuantitativeImpact(parsedCV: ParsedCV, jobDescription: string = ''): CVAnalysisResult {
+export function analyzeQuantitativeImpact(parsedCV: ParsedCV, jobDescription: string = '', jobName: string = ''): CVAnalysisResult {
   const issues: string[] = []
   const recommendations: string[] = []
   let score = 100
 
-  const text = parsedCV.text.toLowerCase()
-  const jobDesc = jobDescription.toLowerCase()
+  // Check if both job title and job description are empty
+  if (!jobDescription && !jobName) {
+    issues.push("Tidak ada informasi pekerjaan target untuk analisis dampak kuantitatif")
+    recommendations.push("Masukkan nama pekerjaan dan deskripsi untuk analisis yang lebih akurat")
+    score = 0 // Give 0 score when no job info provided as requested
+  } else {
+    const text = parsedCV.text.toLowerCase()
+    const jobDesc = jobDescription.toLowerCase()
 
-  // Check for quantifiable achievements
-  const hasNumbers = /\d+%|\d+\+|\$\d+|\d+ years?|\d+ months?|\d+ projects?|\d+ clients?|\d+ users?/g.test(text)
-  const quantifiableMatches = text.match(/\d+%|\d+\+|\$\d+|\d+ years?|\d+ months?|\d+ projects?|\d+ clients?|\d+ users?/g) || []
-  
-  if (quantifiableMatches.length < 3) {
-    issues.push("Kurang dampak kuantitatif dalam pengalaman kerja")
-    recommendations.push("Tambahkan angka spesifik seperti peningkatan 25%, mengelola 10+ proyek, dll")
-    score -= 30
-  }
-
-  // Check relevance to job description
-  if (jobDesc) {
-    const jobKeywords = jobDesc.match(/\b\w{4,}\b/g) || []
-    const relevantKeywords = jobKeywords.filter(keyword => text.includes(keyword))
-    const relevanceScore = (relevantKeywords.length / Math.max(jobKeywords.length, 1)) * 100
+    // Check for quantifiable achievements
+    const hasNumbers = /\d+%|\d+\+|\$\d+|\d+ years?|\d+ months?|\d+ projects?|\d+ clients?|\d+ users?/g.test(text)
+    const quantifiableMatches = text.match(/\d+%|\d+\+|\$\d+|\d+ years?|\d+ months?|\d+ projects?|\d+ clients?|\d+ users?/g) || []
     
-    if (relevanceScore < 30) {
-      issues.push("Pengalaman kerja kurang relevan dengan posisi yang dilamar")
-      recommendations.push("Sesuaikan pengalaman dengan requirement job description")
-      score -= 25
+    if (quantifiableMatches.length < 3) {
+      issues.push("Kurang dampak kuantitatif dalam pengalaman kerja")
+      recommendations.push("Tambahkan angka spesifik seperti peningkatan 25%, mengelola 10+ proyek, dll")
+      score -= 30
     }
-  }
 
-  // Check for project experience
-  const hasProjects = /project|proyek|pengembangan|implementasi|membangun|menciptakan/i.test(text)
-  if (!hasProjects) {
-    issues.push("Tidak ada pengalaman project yang jelas")
-    recommendations.push("Sertakan project-project relevan yang pernah dikerjakan")
-    score -= 20
+    // Check relevance to job description
+    if (jobDesc) {
+      const jobKeywords = jobDesc.match(/\b\w{4,}\b/g) || []
+      const relevantKeywords = jobKeywords.filter(keyword => text.includes(keyword))
+      const relevanceScore = (relevantKeywords.length / Math.max(jobKeywords.length, 1)) * 100
+      
+      if (relevanceScore < 30) {
+        issues.push("Pengalaman kerja kurang relevan dengan posisi yang dilamar")
+        recommendations.push("Sesuaikan pengalaman dengan requirement job description")
+        score -= 25
+      }
+    }
+
+    // Check for project experience
+    const hasProjects = /project|proyek|pengembangan|implementasi|membangun|menciptakan/i.test(text)
+    if (!hasProjects) {
+      issues.push("Tidak ada pengalaman project yang jelas")
+      recommendations.push("Sertakan project-project relevan yang pernah dikerjakan")
+      score -= 20
+    }
   }
 
   let status: CVAnalysisResult["status"]
@@ -442,6 +449,110 @@ export function analyzeCVCompleteness(parsedCV: ParsedCV): CVAnalysisResult {
   }
 }
 
+// Enhanced TF-IDF implementation for better keyword extraction
+interface TFIDFEntry {
+  term: string;
+  tf: number;
+  idf: number;
+  tfidf: number;
+}
+
+// Simple TF-IDF calculation function
+function calculateTFIDF(documents: string[], targetDocumentIndex: number): TFIDFEntry[] {
+  // Tokenize and clean documents
+  const stopWords = new Set([
+    'dengan', 'untuk', 'yang', 'dari', 'dalam', 'pada', 'akan', 'dapat', 'harus', 
+    'atau', 'dan', 'juga', 'this', 'that', 'with', 'from', 'will', 'have', 'been', 
+    'are', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as',
+    'is', 'was', 'be', 'by', 'an', 'a', 'we', 'you', 'they', 'their', 'our', 'your'
+  ]);
+  
+  const tokenize = (text: string): string[] => {
+    return text.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length >= 3 && !stopWords.has(word));
+  };
+  
+  // Tokenize all documents
+  const tokenizedDocs = documents.map(doc => tokenize(doc));
+  
+  // Calculate term frequency for target document
+  const targetDoc = tokenizedDocs[targetDocumentIndex];
+  const termFreq: Record<string, number> = {};
+  
+  targetDoc.forEach(term => {
+    termFreq[term] = (termFreq[term] || 0) + 1;
+  });
+  
+  // Calculate TF (term frequency)
+  const tf: Record<string, number> = {};
+  const totalTerms = targetDoc.length;
+  
+  Object.keys(termFreq).forEach(term => {
+    tf[term] = termFreq[term] / totalTerms;
+  });
+  
+  // Calculate IDF (inverse document frequency)
+  const idf: Record<string, number> = {};
+  const totalDocs = documents.length;
+  
+  Object.keys(tf).forEach(term => {
+    // Count how many documents contain this term
+    const docsContainingTerm = tokenizedDocs.filter(doc => doc.includes(term)).length;
+    // Add 1 to denominator to prevent division by zero
+    idf[term] = Math.log(totalDocs / (1 + docsContainingTerm));
+  });
+  
+  // Calculate TF-IDF
+  const tfidf: TFIDFEntry[] = [];
+  
+  Object.keys(tf).forEach(term => {
+    const tfidfValue = tf[term] * idf[term];
+    tfidf.push({
+      term,
+      tf: tf[term],
+      idf: idf[term],
+      tfidf: tfidfValue
+    });
+  });
+  
+  // Sort by TF-IDF score descending
+  return tfidf.sort((a, b) => b.tfidf - a.tfidf);
+}
+
+// Semantic similarity function using simple word overlap
+function calculateSemanticSimilarity(text1: string, text2: string): number {
+  const stopWords = new Set([
+    'dengan', 'untuk', 'yang', 'dari', 'dalam', 'pada', 'akan', 'dapat', 'harus', 
+    'atau', 'dan', 'juga', 'this', 'that', 'with', 'from', 'will', 'have', 'been', 
+    'are', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'as',
+    'is', 'was', 'be', 'by', 'an', 'a', 'we', 'you', 'they', 'their', 'our', 'your'
+  ]);
+  
+  const tokenize = (text: string): Set<string> => {
+    return new Set(
+      text.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length >= 3 && !stopWords.has(word))
+    );
+  };
+  
+  const tokens1 = tokenize(text1);
+  const tokens2 = tokenize(text2);
+  
+  // Find intersection
+  const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
+  
+  // Calculate Jaccard similarity
+  const union = new Set([...tokens1, ...tokens2]);
+  
+  if (union.size === 0) return 0;
+  
+  return intersection.size / union.size;
+}
+
 // Analyze job-specific keywords with enhanced comparison
 export function analyzeJobKeywords(parsedCV: ParsedCV, jobDescription: string = '', jobName: string = ''): CVAnalysisResult {
   const issues: string[] = []
@@ -488,39 +599,72 @@ export function analyzeJobKeywords(parsedCV: ParsedCV, jobDescription: string = 
     })
     
     const allMatches = [...new Set([...directMatches, ...partialMatches])]
-    const keywordMatchRate = (allMatches.length / Math.max(jobKeywords.length, 1)) * 100
     
-    // Score calculation with bonuses for technical and action verb matches
-    score = Math.round(keywordMatchRate)
+    // Advanced keyword analysis using TF-IDF
+    const documents = [cvText, jobDesc];
+    const cvKeywords = calculateTFIDF(documents, 0);
+    const jobKeywordsTFIDF = calculateTFIDF(documents, 1);
     
-    // Bonus points for technical skills relevance
-    if (technicalTerms.length > 0) {
-      const techMatches = technicalTerms.filter(term => 
-        cvText.includes(term) || cvText.includes(term.replace(/[.-]/g, ''))
+    // Get top keywords from both documents
+    const topCVKeywords = cvKeywords.slice(0, 20).map(entry => entry.term);
+    const topJobKeywords = jobKeywordsTFIDF.slice(0, 20).map(entry => entry.term);
+    
+    // Find semantic matches between top keywords
+    const semanticMatches = topCVKeywords.filter(cvTerm => 
+      topJobKeywords.some(jobTerm => 
+        calculateSemanticSimilarity(cvTerm, jobTerm) > 0.3 || 
+        cvTerm.includes(jobTerm) || 
+        jobTerm.includes(cvTerm)
       )
-      const techMatchRate = (techMatches.length / technicalTerms.length) * 100
-      if (techMatchRate > keywordMatchRate) {
-        score = Math.min(100, score + Math.round((techMatchRate - keywordMatchRate) * 0.3))
-      }
-    }
+    );
+    
+    // Enhanced scoring algorithm based on ATS best practices
+    // 1. Exact keyword match rate (30% weight)
+    const exactMatchRate = (directMatches.length / Math.max(jobKeywords.length, 1)) * 100
+    const exactMatchScore = exactMatchRate * 0.3
+    
+    // 2. Technical skills match rate (25% weight)
+    const techMatchRate = technicalTerms.length > 0 
+      ? (technicalTerms.filter(term => 
+          cvText.includes(term) || cvText.includes(term.replace(/[.-]/g, ''))
+        ).length / technicalTerms.length) * 100
+      : 0
+    const techMatchScore = techMatchRate * 0.25
+    
+    // 3. Action verbs match rate (15% weight)
+    const actionVerbRate = actionVerbs.length > 0
+      ? (actionVerbs.filter(verb => cvText.includes(verb)).length / actionVerbs.length) * 100
+      : 0
+    const actionVerbScore = actionVerbRate * 0.15
+    
+    // 4. Semantic similarity score (20% weight)
+    const semanticSimilarity = calculateSemanticSimilarity(cvText, jobDesc);
+    const semanticScore = semanticSimilarity * 100 * 0.2;
+    
+    // 5. TF-IDF based keyword relevance (10% weight)
+    const tfidfRelevance = (semanticMatches.length / Math.max(topJobKeywords.length, 1)) * 100;
+    const tfidfScore = tfidfRelevance * 0.1;
+    
+    // Calculate final score
+    score = Math.round(exactMatchScore + techMatchScore + actionVerbScore + semanticScore + tfidfScore)
     
     // Provide detailed feedback with specific numbers
     const totalKeywords = jobKeywords.length
     const matchedCount = allMatches.length
     
-    if (keywordMatchRate === 0) {
+    if (exactMatchRate === 0) {
       issues.push(`Tidak ada kata kunci job yang cocok (0 dari ${totalKeywords} kata kunci)`)
       recommendations.push("Sesuaikan CV dengan kata kunci dari job description yang disediakan")
-    } else if (keywordMatchRate < 20) {
-      issues.push(`Hanya ${matchedCount} dari ${totalKeywords} kata kunci job yang cocok (${Math.round(keywordMatchRate)}%)`)
+    } else if (exactMatchRate < 20) {
+      issues.push(`Hanya ${matchedCount} dari ${totalKeywords} kata kunci job yang cocok (${Math.round(exactMatchRate)}%)`)
       recommendations.push("Tingkatkan penggunaan kata kunci yang relevan dengan job description")
-    } else if (keywordMatchRate < 40) {
-      issues.push(`${matchedCount} dari ${totalKeywords} kata kunci job yang cocok (${Math.round(keywordMatchRate)}% - kurang optimal)`)
+    } else if (exactMatchRate < 40) {
+      issues.push(`${matchedCount} dari ${totalKeywords} kata kunci job yang cocok (${Math.round(exactMatchRate)}% - kurang optimal)`)
       recommendations.push("Tambahkan lebih banyak kata kunci yang sesuai dengan requirement job")
-    } else if (keywordMatchRate < 60) {
-      recommendations.push(`${matchedCount} dari ${totalKeywords} kata kunci cocok (${Math.round(keywordMatchRate)}%) - tingkatkan untuk hasil optimal`)
+    } else if (exactMatchRate < 60) {
+      recommendations.push(`${matchedCount} dari ${totalKeywords} kata kunci cocok (${Math.round(exactMatchRate)}%) - tingkatkan untuk hasil optimal`)
     } else {
-      recommendations.push(`Bagus! ${matchedCount} dari ${totalKeywords} kata kunci cocok (${Math.round(keywordMatchRate)}%) dengan job description`)
+      recommendations.push(`Bagus! ${matchedCount} dari ${totalKeywords} kata kunci cocok (${Math.round(exactMatchRate)}%) dengan job description`)
     }
     
     // Specific technical skills feedback
@@ -541,6 +685,14 @@ export function analyzeJobKeywords(parsedCV: ParsedCV, jobDescription: string = 
       issues.push(`Posisi "${jobName}" tidak terdeteksi atau kurang prominent dalam CV`)
       recommendations.push(`Pastikan CV menunjukkan relevansi yang jelas dengan posisi ${jobName}`)
       score = Math.max(0, score - 5) // Small penalty
+    }
+    
+    // Add semantic similarity feedback
+    if (semanticSimilarity > 0.4) {
+      recommendations.push(`Tingkat kesesuaian konteks yang tinggi (${Math.round(semanticSimilarity * 100)}%) antara CV dan deskripsi pekerjaan`)
+    } else if (semanticSimilarity < 0.1) {
+      issues.push("Kurangnya kesesuaian konteks antara CV dan deskripsi pekerjaan")
+      recommendations.push("Sesuaikan konten CV dengan konteks dan persyaratan pekerjaan")
     }
   }
 
@@ -680,7 +832,7 @@ export function analyzeFormat(parsedCV: ParsedCV): CVAnalysisResult {
 
 // Main analysis function with AI-based evaluation
 import { calculateComprehensiveScore, detectIndustry, generateRankingInsights } from "./scoring-system"
-import { analyzeWithAIAndScore, AIAnalysisResult, aiEvaluateCV } from "./ai-analyzer"
+import { analyzeWithAIAndScore, AIAnalysisResult } from "./ai-analyzer"
 
 // Main analysis function with AI-based evaluation (supports PDF input)
 export async function analyzeCV(text: string, jobName: string = '', jobDescription: string = ''): Promise<{
@@ -705,7 +857,7 @@ export async function analyzeCV(text: string, jobName: string = '', jobDescripti
     
     // Use traditional rule-based evaluation only (no AI calls from server-side)
     results = [
-      analyzeQuantitativeImpact(parsedCV, jobDescription),
+      analyzeQuantitativeImpact(parsedCV, jobDescription, jobName),
       analyzeCVLength(parsedCV),
       analyzeCVCompleteness(parsedCV),
       analyzeJobKeywords(parsedCV, jobDescription, jobName),
@@ -727,7 +879,7 @@ export async function analyzeCV(text: string, jobName: string = '', jobDescripti
     
     // Fallback to basic traditional evaluation
     results = [
-      analyzeQuantitativeImpact(parsedCV, jobDescription),
+      analyzeQuantitativeImpact(parsedCV, jobDescription, jobName),
       analyzeCVLength(parsedCV),
       analyzeCVCompleteness(parsedCV),
       analyzeJobKeywords(parsedCV, jobDescription, jobName),

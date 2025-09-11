@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "generate-favicons": "node scripts/generate-favicons.js",
+    "create-favicon": "node scripts/create-favicon.js"
   },
   "dependencies": {
     "@ai-sdk/google": "latest",
@@ -50,6 +52,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "favicons": "^7.2.0",
     "geist": "latest",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
@@ -64,6 +67,7 @@
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.4",
     "sanitize-html": "^2.17.0",
+    "sharp": "^0.34.3",
     "sonner": "^1.7.4",
     "svelte": "latest",
     "tailwind-merge": "^2.5.5",

@@ -1,12 +1,14 @@
 "use client"
 
 import type React from "react"
+import Head from 'next/head'
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Upload, FileText, CheckCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Footer } from "@/components/footer"
 
 export default function HomePage() {
   const [file, setFile] = useState<File | null>(null)
@@ -149,27 +151,30 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
+      <Head>
+        <title>ATS CV Checker - Optimize Your Resume for Applicant Tracking Systems</title>
+        <meta name="description" content="Free AI-powered ATS compatibility checker for resumes and CVs. Get detailed analysis and recommendations to improve your chances of passing automated resume screening." />
+        <meta name="keywords" content="ATS checker, resume optimizer, CV analyzer, applicant tracking system, resume scanner, job application, career tool, hiring process, recruitment, job search" />
+        <link rel="canonical" href="https://ats-checker.cnt-recruitment.com/" />
+      </Head>
+      
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-              <FileText className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">ATS CV Checker</h1>
-              <p className="text-muted-foreground">Optimize your resume for Applicant Tracking Systems</p>
+        <div className="container mx-auto px-2 py-2 mb-8">
+          <div className="flex justify-start" style={{ marginLeft: '28%' }}>
+            <div className="w-30 h-30 flex items-center justify-center">
+              <img src="/cnt-logo.png" alt="CNT Logo" className="w-30 h-30 object-contain" />
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 py-12 flex-grow">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-foreground mb-4">Check Your CV Against ATS Standards</h2>
+            <h1 className="text-3xl font-bold text-foreground mb-4">Check Your CV Against ATS Standards</h1>
             <p className="text-lg text-muted-foreground">
               Upload your CV and get detailed analysis on parsing, keywords, formatting, and readability
             </p>
@@ -188,7 +193,7 @@ export default function HomePage() {
                   value={jobName}
                   onChange={handleJobNameChange}
                   placeholder="e.g., Frontend Developer, Data Analyst, Marketing Manager"
-                  className={`w-full px-3 py-2 border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
+                  className={`w-full px-3 py-2 border rounded-md bg-muted text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${
                     errors.jobName ? "border-red-500 focus:ring-red-500" : "border-input focus:ring-primary"
                   }`}
                 />
@@ -209,7 +214,7 @@ export default function HomePage() {
                   onChange={handleJobDescriptionChange}
                   placeholder="Paste key requirements, skills, and responsibilities from the job posting..."
                   rows={4}
-                  className={`w-full px-3 py-2 border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 resize-none ${
+                  className={`w-full px-3 py-2 border rounded-md bg-muted text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 resize-none ${
                     errors.jobDescription ? "border-red-500 focus:ring-red-500" : "border-input focus:ring-primary"
                   }`}
                 />
@@ -285,12 +290,13 @@ export default function HomePage() {
               <Button
                 onClick={handleATSCheck}
                 disabled={!file || isUploading || !!errors.jobName || !!errors.jobDescription}
-                className="w-full mt-6 bg-primary hover:bg-primary/90 text-primary-foreground"
+                variant="secondary"
+                className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white"
                 size="lg"
               >
                 {isUploading ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Processing CV...
                   </div>
                 ) : (
@@ -343,6 +349,9 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   )
 }
