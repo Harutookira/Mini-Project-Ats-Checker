@@ -239,9 +239,9 @@ export function validateCVFormInputs(
       jobName: jobName || '',
       jobDescription: jobDescription || ''
     });
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      errors.push(...error.errors.map(err => err.message));
+      errors.push(...error.issues.map(issue => issue.message));
     } else {
       errors.push('Validation failed');
     }

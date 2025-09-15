@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "optical-figure-456815-i7",
+  "private_key_id": "45de443cb33a9d16b25ed724180156c03461353f",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDlbE/R3SQKfBql\nevTWdf89ncVaqsAX1bBrNAGyTqoN9xVsGZYLyq/VbIOVCs+jgrdEriYIJt/Wr4V9\nujAEY+bFsei1RSGWe8PAOfByz32KxymHOzfZLpbNBgeHsQ4XOk7st70TL+aaHP1W\nFh6WhlFQVEU1YZg0Sar413KVFGulZocqGZMxfEx8Z/ycxQeuZ7R4ClFaVlUor0Sp\nt725v3ZREoXTVfw0w6/9hMUdg0OnOzuCBUP4aBq+FJldmXvb2SXRDC/AzM/girbB\nlqnXbxyQ72I2ZSJNFd4gmNTGidzz2baomxRqZsXH5aleypNJ+uVEOkpCX0ujScht\nX1z9t6uvAgMBAAECggEAFxeWVyzXlliUhAiCwV1iIg0R0sTyDdQb7EZxT0W8tygi\nF13h7PDrTuObwPI0ISSklryiplpnWGAVYyjM8Xwuu8JjBm/daBywANa0HZJF9CSE\nyRBMWEdotV1Af8dyACOF0yzRUq+VGfkGBNa4IHWHlLrOtodKvySVGXPyHBBQn3ao\nIPd7Izgi5rNX/AaVeR7Vfq10aVxYrMz5uW4ODZz231ubGTr6Ei4uW/BVQpxpJPff\nzP/D4pGl24cpQOt4Q6o9RHWa/vQ7Dh0mnu5/uHKdE01p+QGy4oBEmwPffR/UtEXb\nlsBtAiETo15h6Ntt/iUJVbNt7+9sAC5y55y+QxaWvQKBgQD5LNeIWokFGwerIsub\nxzUXkePTg1FxBVe0seg7o2sWrEuu4yx/h9EyeIzOWN21uTlXOjXLxh0Jre/TuExu\nGqoryh5comF911gr04CIxCOAX6pz5VgAZog033M51pkSzDenX4T0H9oSaQhVVBJJ\n5byu9cyP1XOXyHOyL6SG5zpySwKBgQDrtPkUEXtz+kWmURs5RQFXUKSJuPOyl+W8\ndzBCH9ZEHa9wllFK9LG8ov+3yMD2chJk73rVMB5hrkmSKcPW2tXz4zrrXy6G0kt8\nx/jNso1jurqvPI3EbDQqKkofs3vnvgNvfMdasiBHY12UVpPGFIx4XlloGTxZWXhh\naSaXxJvtrQKBgQCRSqpqoY/f4ED6cxGSRfgZREI6JQoqAtl/TXWCwOlCkTiYQ3LA\n8irzaQOBlqPAwL5EtHaF2YE5EakUJRS75uRvIC3QCgca36RT+cGq/eNNiXrUlVhY\n83BclCaWBSHAqj+RYssdpiz8Ky5mwtzfJgx9YGnlPKtoR8PelJU07ENSPQKBgHMG\nV97xQRux8LdfMTfbcvIXSpRjC5oGAnjceVJrkvaevfTlhjpb+zihGsWnVHNv64YS\nUBElcE4e7YxEkWuSU4K3SxN92Yi1q1zzgXlwPwuCHoRRuqU2YKaLCK07u6W11ptb\nezXJY3MzDIHNVkP91ycOc/cXCZpYzSRMWicKLUXpAoGAJrGcZ5pUQPgyhqezF25z\nlepu/h4qe9Roo7L2eO4XFd/Ez3bnnKrwhzn3ehmu7JWkRjjJkucmLm1etqpsTQB8\nGvC46DlxFpZeKdzo3DKajoonhZjuZToDfy2Q+pd05A/6gWJkNh6A/xogSxawit8L\nhDellZehsaa9nM/H4/muciE=\n-----END PRIVATE KEY-----\n",
+  "client_email": "test-ocr@optical-figure-456815-i7.iam.gserviceaccount.com",
+  "client_id": "101484818466201406989",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test-ocr%40optical-figure-456815-i7.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

@@ -49,7 +49,7 @@ async function handleGeminiQuickstart(prompt: string): Promise<string> {
 
     const data = await response.json();
     return data.result || "No response from AI";
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error with Gemini quickstart:', error);
     return `❌ Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`;
   }
@@ -902,7 +902,9 @@ export default function ResultsPage() {
                 </Badge>
               </div>
               <div className="flex-1">
-                <Progress value={analysis.overallScore} className="h-3" />
+                <div className="h-3">
+                  <Progress value={analysis.overallScore} />
+                </div>
                 <p className="text-sm text-muted-foreground mt-2">
                   CV Anda mendapat skor {analysis.overallScore}% berdasarkan kriteria penilaian ATS
                 </p>
@@ -995,7 +997,9 @@ export default function ResultsPage() {
               </CardHeader>
               <CardContent>
                 <div className="mb-4">
-                  <Progress value={result.score} className="h-2" />
+                  <div className="h-2">
+                    <Progress value={result.score} />
+                  </div>
                 </div>
 
                 {result.issues.length > 0 && (

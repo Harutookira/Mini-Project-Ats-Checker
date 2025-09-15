@@ -57,7 +57,7 @@ function preserveBulletPoints(text: string): string {
       /^[a-zA-Z][\.):]\s*(.+)$/,               // Lettered lists (a. a) a:)
       /^[ivx]+[\.):]\s*(.+)$/i,                // Roman numerals
       /^\([\da-zA-Z]+\)\s*(.+)$/,             // Parenthetical numbering
-      /^[\u25cf\u25cb\u25aa\u25ab\u2013\u2014]\s*(.+)$/,  // Additional bullet symbols
+      /^[\u25cf\u25cb\u25aa\u25ab\u2013\u2014]\s*(.+)$/  // Additional bullet symbols
     ]
     
     // Check if line matches any bullet pattern
@@ -101,8 +101,7 @@ function preserveBulletPoints(text: string): string {
   
   // Clean up extra whitespace while preserving structure
   processedText = processedText
-    .replace(/\n\s*\n\s*\n/g, '\n\n')  // Remove excessive line breaks
-    .replace(/[ \t]+/g, ' ')          // Normalize spaces
+    .replace(/\n\s*\n\s*\n/g, "\n\n")  // Remove excessive line breaks
     .replace(/•\s+•/g, '•')      // Fix double bullets
     .trim()
   
@@ -114,16 +113,39 @@ function preserveBulletPoints(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[API] Received POST request to /api/analyze-cv");
+    console.log("[API] Environment variables:", {
+      NODE_ENV: process.env.NODE_ENV,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY ? "[SET]" : "[NOT SET]",
+      GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? "[SET]" : "[NOT SET]"
+    });
+    
+    // Add CORS headers for development
+    if (process.env.NODE_ENV === 'development') {
+      console.log("[API] Adding CORS headers for development");
+    }
+    
     // Rate limiting - check if the client is making too many requests
     const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    console.log("[API] Client IP:", clientIP);
+    
     if (isRateLimited(clientIP)) {
+      console.log("[API] Rate limit exceeded for client:", clientIP);
       return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
     }
 
     const formData = await request.formData()
+    console.log("[API] Form data received");
+    
     const file = formData.get("file") as File
     let jobName = formData.get("jobName") as string || ''
     let jobDescription = formData.get("jobDescription") as string || ''
+
+    console.log("[API] File info:", {
+      name: file?.name,
+      size: file?.size,
+      type: file?.type
+    });
 
     // Sanitize inputs to prevent XSS
     jobName = sanitizeText(jobName)
@@ -131,19 +153,32 @@ export async function POST(request: NextRequest) {
 
     // Validate inputs
     if (!file) {
+      console.log("[API] No file provided in request");
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
     // Validate file with enhanced security checks
     const fileValidation = validateFile(file)
     if (!fileValidation.isValid) {
+      console.log("[API] File validation failed:", fileValidation.error);
       return NextResponse.json({ error: fileValidation.error }, { status: 400 })
+    }
+
+    // Check file size limit (1MB = 1,048,576 bytes)
+    const MAX_FILE_SIZE = 1048576; // 1MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      console.log("[API] File size exceeds limit:", file.size);
+      return NextResponse.json({ 
+        error: "File too large", 
+        message: "File size exceeds 1MB limit. Please upload a smaller file."
+      }, { status: 400 })
     }
 
     // Validate job name if provided
     if (jobName) {
       const jobNameValidation = validateJobName(jobName)
       if (!jobNameValidation.isValid) {
+        console.log("[API] Job name validation failed:", jobNameValidation.error);
         return NextResponse.json({ error: jobNameValidation.error }, { status: 400 })
       }
     }
@@ -152,6 +187,7 @@ export async function POST(request: NextRequest) {
     if (jobDescription) {
       const jobDescriptionValidation = validateJobDescription(jobDescription)
       if (!jobDescriptionValidation.isValid) {
+        console.log("[API] Job description validation failed:", jobDescriptionValidation.error);
         return NextResponse.json({ error: jobDescriptionValidation.error }, { status: 400 })
       }
     }
@@ -164,7 +200,11 @@ export async function POST(request: NextRequest) {
       "text/plain",
     ]
 
+    console.log("[API] File type:", file.type);
+    console.log("[API] Allowed types:", allowedTypes);
+
     if (!allowedTypes.includes(file.type)) {
+      console.log("[API] Invalid file type detected");
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 })
     }
 
@@ -177,6 +217,8 @@ export async function POST(request: NextRequest) {
       // Get file buffer first
       originalFileBuffer = Buffer.from(await file.arrayBuffer())
       
+      console.log("[File Processing] Buffer size:", originalFileBuffer.length);
+      
       if (file.type === "text/plain") {
         const rawText = await file.text()
         extractedText = preserveBulletPoints(rawText)
@@ -184,17 +226,34 @@ export async function POST(request: NextRequest) {
         console.log('[Text Processing] Raw text length:', rawText.length)
         console.log('[Text Processing] Processed text length:', extractedText.length)
       } else if (file.type === "application/pdf") {
-        // Parse PDF file using dynamic import to avoid build issues
-        const pdfParse = (await import('pdf-parse')).default
-        const pdfData = await pdfParse(originalFileBuffer)
-        
-        // Process the extracted text to preserve bullet points
-        const rawText = pdfData.text
-        extractedText = preserveBulletPoints(rawText)
-        
-        console.log('[PDF Processing] Raw text length:', rawText.length)
-        console.log('[PDF Processing] Processed text length:', extractedText.length)
-        console.log('[PDF Processing] Sample processed text:', extractedText.substring(0, 500) + '...')
+        // Parse PDF file using our enhanced extraction function
+        try {
+          console.log("[PDF Processing] Starting PDF parsing...");
+          console.log("[PDF Processing] PDF file details:", {
+            name: file.name,
+            size: file.size,
+            type: file.type
+          });
+          
+          // Add additional debugging info
+          if (originalFileBuffer.length === 0) {
+            throw new Error("PDF file buffer is empty");
+          }
+          
+          if (originalFileBuffer.length > 50 * 1024 * 1024) { // 50MB limit
+            throw new Error("PDF file is too large (over 50MB)");
+          }
+          
+          const rawText = await extractTextFromPDF(originalFileBuffer);
+          extractedText = preserveBulletPoints(rawText);
+          
+          console.log('[PDF Processing] Raw text length:', rawText.length);
+          console.log('[PDF Processing] Processed text length:', extractedText.length);
+          console.log('[PDF Processing] Sample processed text:', extractedText.substring(0, 500) + '...');
+        } catch (pdfError) {
+          console.error("[PDF Processing] PDF parsing failed:", pdfError);
+          throw new Error(`Failed to extract text from PDF: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`);
+        }
       } else if (
         file.type === "application/msword" ||
         file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -203,7 +262,7 @@ export async function POST(request: NextRequest) {
         const result = await mammoth.extractRawText({ buffer: originalFileBuffer })
         
         // Process the extracted text to preserve bullet points
-        const rawText = result.value
+        const rawText = result.value || "" // Handle potential undefined text
         extractedText = preserveBulletPoints(rawText)
         
         console.log('[Word Processing] Raw text length:', rawText.length)
@@ -212,12 +271,39 @@ export async function POST(request: NextRequest) {
       }
 
       // Check if we successfully extracted any text
+      console.log("[Text Validation] Extracted text length:", extractedText?.length || 0);
+      console.log("[Text Validation] Extracted text sample:", extractedText?.substring(0, 100) || "null/empty");
+      
       if (!extractedText || extractedText.trim().length === 0) {
-        return NextResponse.json({
-          success: false,
-          error: "Tidak ada data",
-          message: "Tidak dapat mengekstrak teks dari file yang diunggah"
-        }, { status: 400 })
+        console.error("[Text Extraction] No text could be extracted from file:", {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          extractedTextLength: extractedText?.length || 0
+        });
+        
+        // Final check after potential alternative extraction
+        if (!extractedText || extractedText.trim().length === 0) {
+          return NextResponse.json({
+            success: false,
+            error: "Tidak ada data",
+            message: "Tidak dapat mengekstrak teks dari file yang diunggah. File mungkin:\n\n" +
+              "1. Merupakan PDF hasil scan gambar tanpa teks yang dapat dipilih\n" +
+              "2. Dilindungi kata sandi\n" +
+              "3. Rusak atau dalam format yang tidak didukung\n\n" +
+              "Solusi yang dapat dicoba:\n" +
+              "- Konversi CV Anda ke format PDF berbasis teks atau DOCX\n" +
+              "- Gunakan file PDF yang berbeda\n" +
+              "- Simpan CV Anda dalam format teks biasa (.txt)\n" +
+              "- Pastikan file tidak dilindungi kata sandi\n\n" +
+              "Ukuran file maksimal adalah 1MB.",
+            debugInfo: process.env.NODE_ENV === 'development' ? {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size
+            } : undefined
+          }, { status: 400 });
+        }
       }
 
       // Cache the extracted text in a simple in-memory cache
@@ -249,11 +335,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: false,
         error: "Tidak ada data",
-        message: "Gagal mengekstrak teks dari file. Pastikan file tidak rusak dan dalam format yang didukung."
+        message: "Gagal mengekstrak teks dari file. File mungkin:\n\n" +
+          "1. Merupakan PDF hasil scan gambar tanpa teks yang dapat dipilih\n" +
+          "2. Dilindungi kata sandi\n" +
+          "3. Rusak atau dalam format yang tidak didukung\n\n" +
+          "Solusi yang dapat dicoba:\n" +
+          "- Konversi CV Anda ke format PDF berbasis teks atau DOCX\n" +
+          "- Gunakan file PDF yang berbeda\n" +
+          "- Simpan CV Anda dalam format teks biasa (.txt)\n" +
+          "- Pastikan file tidak dilindungi kata sandi\n\n" +
+          "Ukuran file maksimal adalah 1MB.",
+        debugInfo: process.env.NODE_ENV === 'development' ? {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          error: extractionError instanceof Error ? extractionError.message : String(extractionError)
+        } : undefined
       }, { status: 400 })
     }
 
     // Perform enhanced AI analysis with job information
+    console.log("[API] Starting CV analysis...");
     const analysis = await analyzeCV(
       extractedText, 
       jobName, 
@@ -297,7 +399,8 @@ export async function POST(request: NextRequest) {
       ]
     }
 
-    return NextResponse.json({
+    console.log("[API] Returning successful response");
+    const response = NextResponse.json({
       success: true,
       analysis: {
         overallScore: analysis.overallScore,
@@ -313,11 +416,42 @@ export async function POST(request: NextRequest) {
         parsedSections: analysis.parsedCV.sections,
         cacheKey: cacheKey, // Include cache key in response for potential future use
       },
-    })
-  } catch (error) {
+    });
+    
+    // Add CORS headers for development
+    if (process.env.NODE_ENV === 'development') {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    
+    return response;
+  } catch (error: unknown) {
     console.error("CV Analysis Error:", error)
-    return NextResponse.json({ error: "Failed to analyze CV" }, { status: 500 })
+    const response = NextResponse.json({ error: "Failed to analyze CV" }, { status: 500 });
+    
+    // Add CORS headers for development
+    if (process.env.NODE_ENV === 'development') {
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    
+    return response;
   }
+}
+
+// Handle OPTIONS requests for CORS
+export async function OPTIONS(request: NextRequest) {
+  const response = new NextResponse(null, { status: 204 });
+  
+  if (process.env.NODE_ENV === 'development') {
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  
+  return response;
 }
 
 // GET endpoint to retrieve cached CV data
@@ -375,8 +509,786 @@ export async function GET(request: NextRequest) {
       }
     })
     
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Cache retrieval error:", error)
     return NextResponse.json({ error: "Failed to retrieve cached data" }, { status: 500 })
+  }
+}
+
+// Enhanced PDF text extraction with fallback to OCR
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
+  console.log("[PDF Processing] Starting PDF text extraction");
+  console.log(`[PDF Processing] PDF buffer size: ${buffer.length} bytes`);
+  
+  // Validate buffer size
+  if (buffer.length === 0) {
+    throw new Error("PDF file is empty");
+  }
+  
+  // Check if file is too large (over 50MB)
+  if (buffer.length > 50 * 1024 * 1024) {
+    throw new Error("PDF file is too large (over 50MB). Please use a smaller file.");
+  }
+  
+  try {
+    // First, try standard PDF parsing
+    console.log("[PDF Processing] Attempting standard PDF parsing...");
+    const pdfParse = (await import('pdf-parse')).default;
+    
+    const pdfData = await pdfParse(buffer);
+    const extractedText = pdfData.text || "";
+    
+    console.log("[PDF Processing] Standard extraction completed. Text length:", extractedText.length);
+    
+    // If we got text, return it
+    if (extractedText.trim().length > 0) {
+      console.log("[PDF Processing] Standard extraction successful");
+      return extractedText;
+    }
+    
+    // If no text was extracted, try Tesseract.js OCR for image-only PDFs
+    console.log("[PDF Processing] No text extracted, falling back to Tesseract.js OCR");
+    return await extractTextFromPDFWithTesseract(buffer);
+  } catch (error: unknown) {
+    console.error("[PDF Processing] Standard extraction failed:", error);
+    
+    // Log specific error details
+    if (error instanceof Error) {
+      console.error("[PDF Processing] Error details:", {
+        message: error.message,
+        stack: error.stack
+      });
+    }
+    
+    // If standard extraction fails, try Tesseract.js OCR as fallback
+    try {
+      console.log("[PDF Processing] Attempting Tesseract.js OCR fallback");
+      return await extractTextFromPDFWithTesseract(buffer);
+    } catch (tesseractError: unknown) {
+      console.error("[PDF Processing] Tesseract.js OCR fallback also failed:", tesseractError);
+      
+      // Fall back to the existing OCR.Space implementation
+      try {
+        console.log("[PDF Processing] Falling back to OCR.Space implementation");
+        const apiKey = 'K88032051088957'; // OCR.Space API key
+        return await extractTextFromImagePDF(buffer);
+      } catch (fallbackError: unknown) {
+        console.error("[PDF Processing] OCR.Space fallback also failed:", fallbackError);
+        
+        // Last resort: Try page-by-page OCR as a final fallback
+        try {
+          console.log("[PDF Processing] Trying final fallback - page-by-page OCR");
+          const apiKey = 'K88032051088957'; // OCR.Space API key
+          return await extractTextFromPDFPages(buffer, apiKey);
+        } catch (finalFallbackError: unknown) {
+          console.error("[PDF Processing] All OCR fallbacks failed. PDF may be corrupted or incompatible.");
+          
+          // Provide a more descriptive error message with possible solutions
+          const detailedErrorMessage = 
+            `PDF processing failed: All OCR methods failed. The PDF file may be:\n` +
+            `- Corrupted or password-protected\n` +
+            `- A scanned image without selectable text\n` +
+            `- In an incompatible format\n\n` +
+            `Please try:\n` +
+            `1. Converting your CV to a text-based PDF or DOCX format\n` +
+            `2. Using a different PDF file\n` +
+            `3. Converting your CV to plain text (.txt) format\n` +
+            `4. Ensuring the file is not password-protected`;
+          
+          throw new Error(detailedErrorMessage);
+        }
+      }
+    }
+  }
+}
+
+// Add Tesseract.js OCR function for image-based PDFs with improved error handling
+async function extractTextFromPDFWithTesseract(pdfBuffer: Buffer): Promise<string> {
+  console.log("[PDF Tesseract OCR] Starting OCR processing for image-based PDF using Tesseract.js");
+  console.log(`[PDF Tesseract OCR] PDF buffer size: ${pdfBuffer.length} bytes`);
+  
+  try {
+    // For server-side OCR, we'll convert PDF pages to images and use Tesseract.js
+    console.log("[PDF Tesseract OCR] Loading pdfjs-dist...");
+    const pdfjsLib = await import('pdfjs-dist');
+    
+    // For Node.js environment, we don't need to set up a worker URL
+    // PDF.js will use a fake worker in Node.js environments
+    console.log("[PDF Tesseract OCR] Skipping worker setup for Node.js environment");
+    
+    // Convert Buffer to Uint8Array for PDF.js compatibility
+    const uint8Array = new Uint8Array(pdfBuffer);
+    
+    // Load PDF document
+    console.log("[PDF Tesseract OCR] Loading PDF document...");
+    const pdfDoc = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+    console.log(`[PDF Tesseract OCR] PDF loaded with ${pdfDoc.numPages} pages`);
+    
+    if (pdfDoc.numPages === 0) {
+      console.warn("[PDF Tesseract OCR] PDF has no pages");
+      return "";
+    }
+    
+    let fullText = '';
+    let successfulPages = 0;
+    
+    // Process each page (limit to first 3 pages to avoid performance issues with 1MB limit)
+    const maxPages = Math.min(pdfDoc.numPages, 3);
+    console.log(`[PDF Tesseract OCR] Processing up to ${maxPages} pages`);
+    
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      console.log(`[PDF Tesseract OCR] Processing page ${pageNum}`);
+      
+      try {
+        // Get page
+        const page = await pdfDoc.getPage(pageNum);
+        
+        // Get viewport at scale 1.5 (balance between quality and performance)
+        const viewport = page.getViewport({ scale: 1.5 });
+        
+        // Check if the page is too large
+        if (viewport.width > 3000 || viewport.height > 3000) {
+          console.warn(`[PDF Tesseract OCR] Page ${pageNum} is too large (${viewport.width}x${viewport.height}), trying smaller scale...`);
+          // Try with a smaller scale
+          const smallerViewport = page.getViewport({ scale: 1.0 });
+          if (smallerViewport.width > 3000 || smallerViewport.height > 3000) {
+            console.warn(`[PDF Tesseract OCR] Page ${pageNum} is still too large, skipping`);
+            continue;
+          }
+        }
+        
+        // Try to create canvas and context using node-canvas
+        console.log(`[PDF Tesseract OCR] Creating canvas for page ${pageNum}...`);
+        let canvas, context;
+        
+        try {
+          const { createCanvas } = await import('canvas');
+          canvas = createCanvas(viewport.width, viewport.height);
+          context = canvas.getContext('2d');
+        } catch (canvasError) {
+          console.warn(`[PDF Tesseract OCR] Canvas creation failed, trying alternative method:`, canvasError);
+          // If canvas fails, we can't process this page with Tesseract
+          throw new Error(`Canvas creation failed: ${canvasError instanceof Error ? canvasError.message : String(canvasError)}`);
+        }
+        
+        // Render page to canvas
+        console.log(`[PDF Tesseract OCR] Rendering page ${pageNum} to canvas...`);
+        await page.render({
+          canvasContext: context as any,
+          viewport: viewport,
+          canvas: null // Set to null to use canvasContext instead
+        }).promise;
+        
+        // Convert canvas to image buffer
+        console.log(`[PDF Tesseract OCR] Converting canvas to image buffer for page ${pageNum}...`);
+        const imageBuffer = canvas.toBuffer('image/png');
+        
+        // Check image size
+        if (imageBuffer.length > 5 * 1024 * 1024) { // 5MB limit
+          console.warn(`[PDF Tesseract OCR] Page ${pageNum} image is too large (${imageBuffer.length} bytes), trying smaller scale...`);
+          // Try with a smaller scale
+          const smallerViewport = page.getViewport({ scale: 1.0 });
+          const { createCanvas } = await import('canvas');
+          const smallerCanvas = createCanvas(smallerViewport.width, smallerViewport.height);
+          const smallerContext: any = smallerCanvas.getContext('2d');
+          
+          await page.render({
+            canvasContext: smallerContext,
+            viewport: smallerViewport,
+            canvas: null
+          }).promise;
+          
+          const smallerImageBuffer = smallerCanvas.toBuffer('image/png');
+          if (smallerImageBuffer.length > 5 * 1024 * 1024) {
+            console.warn(`[PDF Tesseract OCR] Even smaller image is too large, skipping page ${pageNum}`);
+            continue;
+          }
+          
+          // Use the smaller image
+          try {
+            const smallerRet = await recognizeTextWithTesseract(smallerImageBuffer);
+            if (smallerRet && smallerRet.trim().length > 0) {
+              fullText += smallerRet + '\n\n';
+              successfulPages++;
+              console.log(`[PDF Tesseract OCR] Page ${pageNum} processed with smaller scale, extracted ${smallerRet.length} characters`);
+            } else {
+              console.log(`[PDF Tesseract OCR] Page ${pageNum} produced no text even with smaller scale`);
+            }
+          } catch (ocrError) {
+            console.error(`[PDF Tesseract OCR] OCR failed for page ${pageNum} with smaller scale:`, ocrError);
+          }
+          continue;
+        }
+        
+        // Perform OCR using Tesseract.js
+        console.log(`[PDF Tesseract OCR] Performing OCR on page ${pageNum}...`);
+        try {
+          const ret = await recognizeTextWithTesseract(imageBuffer);
+          
+          if (ret && ret.trim().length > 0) {
+            fullText += ret + '\n\n';
+            successfulPages++;
+            console.log(`[PDF Tesseract OCR] Page ${pageNum} processed, extracted ${ret.length} characters`);
+          } else {
+            console.log(`[PDF Tesseract OCR] Page ${pageNum} produced no text`);
+          }
+        } catch (ocrError) {
+          console.error(`[PDF Tesseract OCR] OCR failed for page ${pageNum}:`, ocrError);
+        }
+      } catch (pageError) {
+        console.error(`[PDF Tesseract OCR] Error processing page ${pageNum}:`, pageError);
+        // Continue with other pages even if one fails
+      }
+    }
+    
+    console.log(`[PDF Tesseract OCR] OCR completed, processed ${successfulPages}/${maxPages} pages, total extracted text length: ${fullText.length}`);
+    
+    if (fullText.trim().length === 0) {
+      console.warn("[PDF Tesseract OCR] No text was extracted from any page");
+      throw new Error("Tesseract.js OCR completed but extracted no text. The PDF may contain only images with no recognizable text or may be corrupted.");
+    }
+    
+    return fullText;
+  } catch (error) {
+    console.error("[PDF Tesseract OCR] Error in OCR processing:", error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes("canvas")) {
+        throw new Error(`Tesseract OCR failed due to canvas processing issues: ${error.message}. This may be due to missing system dependencies or incompatible PDF format.`);
+      } else if (error.message.includes("worker")) {
+        throw new Error(`Tesseract OCR failed due to worker initialization issues: ${error.message}. This may be due to missing language data or system resource constraints.`);
+      } else if (error.message.includes("EACCES") || error.message.includes("permission")) {
+        throw new Error(`Tesseract OCR failed due to permission issues: ${error.message}. This may be due to file access restrictions.`);
+      }
+    }
+    
+    throw new Error(`Tesseract OCR failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Helper function to recognize text with Tesseract.js with better error handling
+async function recognizeTextWithTesseract(imageBuffer: Buffer): Promise<string> {
+  const { createWorker } = await import('tesseract.js');
+  const worker = await createWorker('eng');
+  
+  try {
+    // Set worker options for better performance
+    await worker.setParameters({
+      tessedit_pageseg_mode: 6 as any, // Assume a single uniform block of text
+      tessedit_ocr_engine_mode: 1 as any // Use LSTM OCR Engine only
+    });
+    
+    const ret = await worker.recognize(imageBuffer);
+    return ret.data.text || "";
+  } finally {
+    await worker.terminate();
+  }
+}
+
+// Update the Optiic OCR function to use OCR.Space
+async function extractTextFromImagePDFWithOptiic(pdfBuffer: Buffer): Promise<string> {
+  console.log("[PDF OCR Space] Starting OCR processing for image-based PDF using OCR.Space");
+  return await extractTextFromImagePDF(pdfBuffer);
+}
+
+// Keep the existing OCR function for OCR.Space
+async function extractTextFromImagePDF(pdfBuffer: Buffer): Promise<string> {
+  console.log("[PDF OCR Space] Starting OCR processing for image-based PDF");
+  console.log(`[PDF OCR Space] PDF buffer size: ${pdfBuffer.length} bytes`);
+  
+  // Check if the file is too large for OCR.Space (10MB limit)
+  if (pdfBuffer.length > 10 * 1024 * 1024) {
+    throw new Error("PDF file is too large for OCR.Space API (over 10MB). Please use a smaller file.");
+  }
+  
+  try {
+    // OCR.Space API key
+    const apiKey = 'K88032051088957';
+    
+    console.log("[PDF OCR Space] Sending PDF to OCR.Space API...");
+    
+    // Create form data for the request
+    const formData = new FormData();
+    formData.append('apikey', apiKey);
+    // Convert Buffer to Uint8Array and then to Blob
+    const uint8Array = new Uint8Array(pdfBuffer);
+    const pdfBlob = new Blob([uint8Array], { type: 'application/pdf' });
+    formData.append('file', pdfBlob);
+    formData.append('isOverlayRequired', 'false');
+    formData.append('language', 'eng');
+    formData.append('detectOrientation', 'true'); // Enable orientation detection
+    formData.append('scale', 'true'); // Enable scaling
+    
+    // Send request to OCR.Space API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[PDF OCR Space] OCR.Space API request failed: ${response.status} - ${errorText}`);
+      
+      // Provide more specific error messages based on status code
+      if (response.status === 400) {
+        throw new Error(`OCR.Space API request failed: Bad request. The PDF file may be corrupted or in an unsupported format.`);
+      } else if (response.status === 401) {
+        throw new Error(`OCR.Space API request failed: Unauthorized. Please check the API key.`);
+      } else if (response.status === 429) {
+        throw new Error(`OCR.Space API request failed: Rate limit exceeded. Please try again later.`);
+      } else if (response.status === 500) {
+        throw new Error(`OCR.Space API request failed: Internal server error. Please try again later.`);
+      } else {
+        throw new Error(`OCR.Space API request failed with status ${response.status}: ${errorText}`);
+      }
+    }
+    
+    const result = await response.json();
+    
+    console.log("[PDF OCR Space] OCR.Space API response:", JSON.stringify(result, null, 2));
+    
+    // Check if the request was successful
+    if (!result.IsErroredOnProcessing && result.OCRExitCode === 1) {
+      // Extract text from the response
+      let fullText = '';
+      if (result.ParsedResults && Array.isArray(result.ParsedResults)) {
+        fullText = result.ParsedResults.map((page: any) => page.ParsedText).join('\n\n');
+      }
+      
+      console.log(`[PDF OCR Space] OCR completed, total extracted text length: ${fullText.length}`);
+      
+      if (fullText.trim().length === 0) {
+        console.warn("[PDF OCR Space] Warning: No text was extracted from the PDF using OCR.Space");
+        throw new Error("OCR.Space completed but extracted no text. The PDF may contain only images with no recognizable text or may be corrupted.");
+      }
+      
+      return fullText;
+    } else {
+      // Handle OCR processing errors
+      const errorMessage = result.ErrorMessage || result.ErrorDetails || 'Unknown OCR error';
+      console.error("[PDF OCR Space] OCR processing error:", errorMessage);
+      
+      // If it's a processing error, try to provide more context
+      if (errorMessage.includes("file")) {
+        throw new Error(`OCR.Space processing failed: ${errorMessage}. The file may be corrupted or in an unsupported format.`);
+      } else {
+        throw new Error(`OCR.Space processing failed: ${errorMessage}`);
+      }
+    }
+  } catch (error) {
+    console.error("[PDF OCR Space] Error in OCR processing:", error);
+    
+    // Handle timeout specifically
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('OCR.Space API request timed out. Please try again later.');
+    }
+    
+    throw new Error(`OCR.Space failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Helper function to process PDF pages individually when the whole PDF is too large
+async function extractTextFromPDFPages(pdfBuffer: Buffer, apiKey: string): Promise<string> {
+  console.log("[PDF OCR Pages] Starting page-by-page OCR processing...");
+  console.log(`[PDF OCR Pages] PDF buffer size: ${pdfBuffer.length} bytes`);
+  
+  try {
+    // Add DOMMatrix shim for PDF.js compatibility in Node.js environment
+    // Fix: Create a proper DOMMatrix shim that matches the TypeScript DOMMatrix interface
+    if (typeof globalThis.DOMMatrix === 'undefined') {
+      globalThis.DOMMatrix = class DOMMatrix {
+        a: number; b: number; c: number; d: number; e: number; f: number;
+        m11: number; m12: number; m13: number; m14: number;
+        m21: number; m22: number; m23: number; m24: number;
+        m31: number; m32: number; m33: number; m34: number;
+        m41: number; m42: number; m43: number; m44: number;
+        is2D: boolean; isIdentity: boolean;
+        
+        constructor(init?: string | number[]) {
+          // Initialize with identity matrix values
+          this.a = this.m11 = 1; this.b = this.m12 = 0; this.m13 = 0; this.m14 = 0;
+          this.c = this.m21 = 0; this.d = this.m22 = 1; this.m23 = 0; this.m24 = 0;
+          this.e = this.m41 = 0; this.f = this.m42 = 0; this.m31 = 0; this.m32 = 0;
+          this.m33 = 1; this.m34 = 0; this.m43 = 0; this.m44 = 1;
+          this.is2D = true;
+          this.isIdentity = true;
+          
+          // Apply initialization if provided
+          if (init) {
+            if (typeof init === 'string') {
+              // Parse transform string (simplified)
+              // In a real implementation, this would parse the CSS transform syntax
+            } else if (Array.isArray(init)) {
+              // Apply matrix values from array
+              if (init.length >= 6) {
+                this.a = this.m11 = init[0]; this.b = this.m12 = init[1];
+                this.c = this.m21 = init[2]; this.d = this.m22 = init[3];
+                this.e = this.m41 = init[4]; this.f = this.m42 = init[5];
+                this.isIdentity = false;
+              }
+              if (init.length >= 16) {
+                this.m13 = init[6]; this.m14 = init[7];
+                this.m23 = init[8]; this.m24 = init[9];
+                this.m31 = init[10]; this.m32 = init[11];
+                this.m33 = init[12]; this.m34 = init[13];
+                this.m43 = init[14]; this.m44 = init[15];
+                this.is2D = false;
+              }
+            }
+          }
+        }
+        
+        // Add static methods to match the DOMMatrix interface
+        static fromFloat32Array(array32: Float32Array): DOMMatrix {
+          return new DOMMatrix(Array.from(array32));
+        }
+        
+        static fromFloat64Array(array64: Float64Array): DOMMatrix {
+          return new DOMMatrix(Array.from(array64));
+        }
+        
+        static fromMatrix(other?: DOMMatrixInit): DOMMatrix {
+          if (!other) return new DOMMatrix();
+          // Extract values from DOMMatrixInit object
+          const values = [
+            other.a ?? other.m11 ?? 1, other.b ?? other.m12 ?? 0, other.m13 ?? 0, other.m14 ?? 0,
+            other.c ?? other.m21 ?? 0, other.d ?? other.m22 ?? 1, other.m23 ?? 0, other.m24 ?? 0,
+            other.m31 ?? 0, other.m32 ?? 0, other.m33 ?? 1, other.m34 ?? 0,
+            other.e ?? other.m41 ?? 0, other.f ?? other.m42 ?? 0, other.m43 ?? 0, other.m44 ?? 1
+          ];
+          return new DOMMatrix(values);
+        }
+        
+        // Add basic transformation methods that PDF.js might need
+        scale(scaleX: number, scaleY?: number, scaleZ?: number): DOMMatrix {
+          // Simplified implementation
+          return this;
+        }
+        
+        translate(tx: number, ty: number, tz?: number): DOMMatrix {
+          // Simplified implementation
+          return this;
+        }
+        
+        multiply(other: DOMMatrix): DOMMatrix {
+          // Simplified implementation
+          return this;
+        }
+        
+        // Additional methods that might be needed
+        rotate(angle: number, originX?: number, originY?: number): DOMMatrix {
+          return this;
+        }
+        
+        rotateFromVector(x: number, y: number): DOMMatrix {
+          return this;
+        }
+        
+        rotateAxisAngle(x: number, y: number, z: number, angle: number): DOMMatrix {
+          return this;
+        }
+        
+        skewX(sx: number): DOMMatrix {
+          return this;
+        }
+        
+        skewY(sy: number): DOMMatrix {
+          return this;
+        }
+        
+        invert(): DOMMatrix {
+          return this;
+        }
+        
+        transformPoint(point?: DOMPointInit): DOMPoint {
+          // Simplified implementation
+          return {
+            x: point?.x ?? 0,
+            y: point?.y ?? 0,
+            z: point?.z ?? 0,
+            w: point?.w ?? 1,
+            toJSON: function() { return this; },
+            matrixTransform: function(matrix: DOMMatrix): DOMPoint { return this; } // Add missing method
+          };
+        }
+        
+        toFloat32Array(): Float32Array {
+          return new Float32Array([
+            this.m11, this.m12, this.m13, this.m14,
+            this.m21, this.m22, this.m23, this.m24,
+            this.m31, this.m32, this.m33, this.m34,
+            this.m41, this.m42, this.m43, this.m44
+          ]);
+        }
+        
+        toFloat64Array(): Float64Array {
+          return new Float64Array([
+            this.m11, this.m12, this.m13, this.m14,
+            this.m21, this.m22, this.m23, this.m24,
+            this.m31, this.m32, this.m33, this.m34,
+            this.m41, this.m42, this.m43, this.m44
+          ]);
+        }
+        
+        toJSON(): any {
+          return {
+            a: this.a, b: this.b, c: this.c, d: this.d, e: this.e, f: this.f,
+            m11: this.m11, m12: this.m12, m13: this.m13, m14: this.m14,
+            m21: this.m21, m22: this.m22, m23: this.m24,  // Fixed: Added missing comma
+            m31: this.m31, m32: this.m32, m33: this.m33, m34: this.m34,
+            m41: this.m41, m42: this.m42, m43: this.m43, m44: this.m44,
+            is2D: this.is2D, isIdentity: this.isIdentity
+          };
+        }
+      } as any as typeof DOMMatrix; // Type assertion to match the expected DOMMatrix type
+    }
+    
+    // For server-side OCR, we'll convert PDF pages to images and use OCR.Space API
+    console.log("[PDF OCR Pages] Loading pdfjs-dist...");
+    const pdfjsLib = await import('pdfjs-dist');
+    
+    // For Node.js environment, we don't need to set up a worker URL
+    // PDF.js will use a fake worker in Node.js environments
+    console.log("[PDF OCR Pages] Skipping worker setup for Node.js environment");
+    
+    // Convert Buffer to Uint8Array for PDF.js compatibility
+    const uint8Array = new Uint8Array(pdfBuffer);
+    
+    // Load PDF document
+    console.log("[PDF OCR Pages] Loading PDF document...");
+    const pdfDoc = await pdfjsLib.getDocument({ data: uint8Array }).promise;
+    console.log(`[PDF OCR Pages] PDF loaded with ${pdfDoc.numPages} pages`);
+    
+    if (pdfDoc.numPages === 0) {
+      console.warn("[PDF OCR Pages] PDF has no pages");
+      throw new Error("PDF has no pages to process");
+    }
+    
+    let fullText = '';
+    let successfulPages = 0;
+    
+    // Process each page (limit to first 5 pages to avoid performance issues)
+    const maxPages = Math.min(pdfDoc.numPages, 5);
+    console.log(`[PDF OCR Pages] Processing up to ${maxPages} pages`);
+    
+    // Process each page
+    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+      console.log(`[PDF OCR Pages] Processing page ${pageNum}`);
+      
+      try {
+        // Get page
+        const page = await pdfDoc.getPage(pageNum);
+        
+        // Get viewport at scale 1.5 (balance between quality and file size)
+        const viewport = page.getViewport({ scale: 1.5 });
+        
+        // Try to use canvas first, but fall back to alternative method if canvas fails
+        try {
+          console.log(`[PDF OCR Pages] Creating canvas for page ${pageNum}...`);
+          const { createCanvas } = await import('canvas');
+          const canvas = createCanvas(viewport.width, viewport.height);
+          const context: any = canvas.getContext('2d');
+          
+          // Render page to canvas
+          console.log(`[PDF OCR Pages] Rendering page ${pageNum} to canvas...`);
+          await page.render({
+            canvasContext: context,
+            viewport: viewport,
+            canvas: null // Set to null to use canvasContext instead
+          }).promise;
+          
+          // Convert canvas to image buffer
+          console.log(`[PDF OCR Pages] Converting canvas to image buffer for page ${pageNum}...`);
+          const imageBuffer = canvas.toBuffer('image/png');
+          console.log(`[PDF OCR Pages] Image buffer size: ${imageBuffer.length} bytes`);
+          
+          // Check if image is too large for OCR.Space API (1MB limit)
+          if (imageBuffer.length > 1024 * 1024) {
+            console.warn(`[PDF OCR Pages] Image for page ${pageNum} is too large, trying lower scale...`);
+            // Try with a smaller scale
+            const smallerViewport = page.getViewport({ scale: 1.0 });
+            const smallerCanvas = createCanvas(smallerViewport.width, smallerViewport.height);
+            const smallerContext: any = smallerCanvas.getContext('2d');
+            
+            await page.render({
+              canvasContext: smallerContext,
+              viewport: smallerViewport,
+              canvas: null
+            }).promise;
+            
+            const smallerImageBuffer = smallerCanvas.toBuffer('image/png');
+            console.log(`[PDF OCR Pages] Smaller image buffer size: ${smallerImageBuffer.length} bytes`);
+            
+            if (smallerImageBuffer.length > 1024 * 1024) {
+              console.warn(`[PDF OCR Pages] Even smaller image is too large, skipping page ${pageNum}`);
+              fullText += `[OCR NOTE: Page ${pageNum} was too large for OCR processing]\n\n`;
+              continue;
+            }
+            
+            // Use the smaller image
+            try {
+              const pageText = await processImageWithOCR(smallerImageBuffer, pageNum, apiKey);
+              if (pageText && pageText.trim().length > 0) {
+                fullText += pageText + '\n\n';
+                successfulPages++;
+                console.log(`[PDF OCR Pages] Page ${pageNum} processed successfully with smaller scale`);
+              } else {
+                console.log(`[PDF OCR Pages] Page ${pageNum} produced no text even with smaller scale`);
+                fullText += `[OCR NOTE: Page ${pageNum} produced no recognizable text]\n\n`;
+              }
+            } catch (ocrError) {
+              console.error(`[PDF OCR Pages] OCR failed for page ${pageNum} with smaller scale:`, ocrError);
+              fullText += `[OCR NOTE: Page ${pageNum} OCR failed - ${ocrError instanceof Error ? ocrError.message : String(ocrError)}]\n\n`;
+            }
+          } else {
+            // Process the image with OCR
+            try {
+              const pageText = await processImageWithOCR(imageBuffer, pageNum, apiKey);
+              if (pageText && pageText.trim().length > 0) {
+                fullText += pageText + '\n\n';
+                successfulPages++;
+                console.log(`[PDF OCR Pages] Page ${pageNum} processed successfully`);
+              } else {
+                console.log(`[PDF OCR Pages] Page ${pageNum} produced no text`);
+                fullText += `[OCR NOTE: Page ${pageNum} produced no recognizable text]\n\n`;
+              }
+            } catch (ocrError) {
+              console.error(`[PDF OCR Pages] OCR failed for page ${pageNum}:`, ocrError);
+              fullText += `[OCR NOTE: Page ${pageNum} OCR failed - ${ocrError instanceof Error ? ocrError.message : String(ocrError)}]\n\n`;
+            }
+          }
+        } catch (canvasError) {
+          console.warn(`[PDF OCR Pages] Canvas rendering failed for page ${pageNum}:`, canvasError);
+          // If canvas fails, we can't process this page
+          fullText += `[OCR NOTE: Page ${pageNum} could not be processed due to technical issues]\n\n`;
+        }
+      } catch (pageError) {
+        console.error(`[PDF OCR Pages] Error processing page ${pageNum}:`, pageError);
+        // Continue with other pages even if one fails
+        fullText += `[OCR NOTE: Page ${pageNum} processing failed]\n\n`;
+      }
+    }
+    
+    console.log(`[PDF OCR Pages] OCR completed, processed ${successfulPages}/${maxPages} pages, total extracted text length: ${fullText.length}`);
+    
+    if (fullText.trim().length === 0) {
+      throw new Error("Page-by-page OCR completed but extracted no text from any page. The PDF may contain only images with no recognizable text or may be corrupted.");
+    }
+    
+    return fullText;
+  } catch (error) {
+    console.error("[PDF OCR Pages] Error in page-by-page OCR processing:", error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes("canvas")) {
+        throw new Error(`Page-by-page OCR failed due to canvas processing issues: ${error.message}. This may be due to missing system dependencies or incompatible PDF format.`);
+      } else if (error.message.includes("EACCES") || error.message.includes("permission")) {
+        throw new Error(`Page-by-page OCR failed due to permission issues: ${error.message}. This may be due to file access restrictions.`);
+      }
+    }
+    
+    throw new Error(`Page-by-page OCR failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Helper function to process a single image with OCR.Space API
+async function processImageWithOCR(imageBuffer: Buffer, pageNum: number, apiKey: string): Promise<string> {
+  try {
+    // Check if the image is too large for OCR.Space (1MB limit)
+    if (imageBuffer.length > 1024 * 1024) {
+      throw new Error(`Image for page ${pageNum} is too large for OCR.Space API (over 1MB).`);
+    }
+    
+    // Convert image buffer to base64
+    const base64Image = imageBuffer.toString('base64');
+    
+    // Send to OCR.Space API
+    console.log(`[PDF OCR Pages] Sending page ${pageNum} to OCR.Space API...`);
+    const ocrSpaceApiUrl = 'https://api.ocr.space/parse/image';
+    
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('base64Image', `data:image/png;base64,${base64Image}`);
+    formData.append('apikey', apiKey);
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    formData.append('detectOrientation', 'true'); // Enable orientation detection
+    formData.append('scale', 'true'); // Enable scaling
+    
+    // Send request to OCR.Space API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const response = await fetch(ocrSpaceApiUrl, {
+      method: 'POST',
+      // @ts-ignore - FormData type issues in Node.js
+      body: formData,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[PDF OCR Pages] OCR.Space API request failed for page ${pageNum}: ${response.status} - ${errorText}`);
+      
+      // Provide more specific error messages based on status code
+      if (response.status === 400) {
+        throw new Error(`OCR.Space API request failed for page ${pageNum}: Bad request. The image may be corrupted or in an unsupported format.`);
+      } else if (response.status === 401) {
+        throw new Error(`OCR.Space API request failed for page ${pageNum}: Unauthorized. Please check the API key.`);
+      } else if (response.status === 429) {
+        throw new Error(`OCR.Space API request failed for page ${pageNum}: Rate limit exceeded. Please try again later.`);
+      } else if (response.status === 500) {
+        throw new Error(`OCR.Space API request failed for page ${pageNum}: Internal server error. Please try again later.`);
+      } else {
+        throw new Error(`OCR.Space API request failed for page ${pageNum} with status ${response.status}: ${errorText}`);
+      }
+    }
+    
+    const result = await response.json();
+    
+    // Log the response for debugging
+    console.log(`[PDF OCR Pages] OCR.Space API response for page ${pageNum}:`, JSON.stringify(result, null, 2));
+    
+    // Check if OCR was successful
+    if (result.IsErroredOnProcessing === false && result.OCRExitCode === 1) {
+      // Extract text from the page
+      let pageText = '';
+      if (result.ParsedResults && Array.isArray(result.ParsedResults)) {
+        pageText = result.ParsedResults.map((page: any) => page.ParsedText).join('\n\n');
+      }
+      
+      console.log(`[PDF OCR Pages] Page ${pageNum} processed, extracted ${pageText.length} characters`);
+      return pageText;
+    } else {
+      // Handle OCR processing errors
+      const errorMessage = result.ErrorMessage || result.ErrorDetails || 'Unknown OCR error';
+      console.error(`[PDF OCR Pages] OCR processing error for page ${pageNum}:`, errorMessage);
+      
+      // If it's a processing error, try to provide more context
+      if (errorMessage.includes("file") || errorMessage.includes("image")) {
+        throw new Error(`OCR.Space processing failed for page ${pageNum}: ${errorMessage}. The image may be corrupted or in an unsupported format.`);
+      } else {
+        throw new Error(`OCR.Space processing failed for page ${pageNum}: ${errorMessage}`);
+      }
+    }
+  } catch (error) {
+    console.error(`[PDF OCR Pages] Error processing image for page ${pageNum}:`, error);
+    
+    // Handle timeout specifically
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`OCR failed for page ${pageNum}: Request timed out. Please try again later.`);
+    }
+    
+    throw new Error(`OCR failed for page ${pageNum}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

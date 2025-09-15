@@ -47,7 +47,7 @@ function silentLog(message: string, data?: any): void {
 function safeErrorBoundary<T>(operation: () => T, fallback: T): T {
   try {
     return operation()
-  } catch (error) {
+  } catch (error: unknown) {
     // Log silently without triggering error boundaries
     silentLog('[Safe Error Boundary] Operation failed:', error)
     return fallback
@@ -58,7 +58,7 @@ function safeErrorBoundary<T>(operation: () => T, fallback: T): T {
 async function safeAsyncErrorBoundary<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await operation()
-  } catch (error) {
+  } catch (error: unknown) {
     // Log silently without triggering error boundaries
     silentLog('[Safe Async Error Boundary] Operation failed:', error)
     return fallback
@@ -165,7 +165,7 @@ export async function diagnosticPuterConnection(): Promise<string> {
       results.push(`✅ AI test successful! Response: ${String(testResponse).substring(0, 50)}...`)
       results.push('')
       results.push('✨ Puter.js AI is fully functional and ready for CV analysis!')
-    } catch (testError) {
+    } catch (testError: unknown) {
       results.push(`❌ AI test failed:`)
       
       if (testError && typeof testError === 'object') {
@@ -191,7 +191,7 @@ export async function diagnosticPuterConnection(): Promise<string> {
     
     return results.join('\n')
     
-  } catch (error) {
+  } catch (error: unknown) {
     return `❌ Diagnostic error: ${error instanceof Error ? error.message : String(error)}`
   }
 }
@@ -1110,5 +1110,124 @@ export async function testGeminiIntegration(): Promise<string> {
     return `✅ Gemini AI is working! Response: ${response}`;
   } catch (error) {
     return `❌ Gemini AI test failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// New function for job-specific keyword analysis using AI
+export async function analyzeJobKeywordsWithAI(cvText: string, jobDescription: string, jobTitle: string): Promise<{
+  score: number;
+  issues: string[];
+  recommendations: string[];
+  relevantKeywords: string[];
+  missingKeywords: string[];
+} | null> {
+  try {
+    // Check if API key is available
+    if (!process.env.GOOGLE_API_KEY) {
+      throw new Error('GOOGLE_API_KEY is not set');
+    }
+
+    const prompt = `
+    Anda adalah seorang ahli ATS (Applicant Tracking System) dan recruiter profesional dengan keahlian khusus dalam optimasi keyword untuk CV. 
+    Analisis kesesuaian keyword antara CV kandidat dan persyaratan pekerjaan berikut:
+
+    Nama Pekerjaan: ${jobTitle}
+    
+    Deskripsi Pekerjaan:
+    ${jobDescription}
+    
+    CV Kandidat:
+    ${cvText.substring(0, 20000)} // Limit text length for AI processing
+    
+    Tugas Anda:
+    1. Ekstrak 15-20 keyword paling relevan dari deskripsi pekerjaan (technical skills, soft skills, tools, methodologies, etc.)
+    2. Identifikasi keyword tersebut yang sudah ada di CV kandidat
+    3. Identifikasi keyword penting yang tidak ditemukan di CV kandidat
+    4. Evaluasi penggunaan keyword teknis, action verbs, dan istilah industri
+    5. Berikan skor kesesuaian keyword (0-100) dengan penjelasan detail
+    6. Berikan 3 issue utama terkait keyword yang kurang sesuai
+    7. Berikan 3 rekomendasi spesifik untuk meningkatkan kesesuaian keyword
+    
+    Format respons dalam JSON:
+    {
+      "score": 75,
+      "issues": [
+        "Issue 1: Penjelasan detail masalah keyword",
+        "Issue 2: Penjelasan detail masalah keyword", 
+        "Issue 3: Penjelasan detail masalah keyword"
+      ],
+      "recommendations": [
+        "Rekomendasi 1: Solusi spesifik untuk perbaikan keyword",
+        "Rekomendasi 2: Solusi spesifik untuk perbaikan keyword",
+        "Rekomendasi 3: Solusi spesifik untuk perbaikan keyword"
+      ],
+      "relevantKeywords": [
+        "keyword1",
+        "keyword2", 
+        "keyword3"
+      ],
+      "missingKeywords": [
+        "missing_keyword1",
+        "missing_keyword2",
+        "missing_keyword3"
+      ]
+    }
+    
+    Kriteria penilaian:
+    - Skor 90-100: Sangat baik, hampir semua keyword penting sudah digunakan dengan tepat
+    - Skor 75-89: Baik, beberapa keyword penting perlu ditambahkan
+    - Skor 60-74: Cukup, banyak keyword penting yang perlu ditambahkan
+    - Skor 40-59: Kurang, perlu penambahan keyword secara signifikan
+    - Skor 0-39: Sangat kurang, perlu overhaul konten keyword
+    
+    Penting: 
+    - Berikan hanya JSON response, tanpa tambahan teks
+    - Pastikan semua array memiliki item yang sesuai (3 item untuk issues dan recommendations, beberapa item untuk keywords)
+    - Fokus pada keyword yang spesifik terhadap pekerjaan ini
+    - Gunakan bahasa Indonesia untuk semua respons
+    `;
+
+    // Generate text using the Gemini model
+    const { text } = await generateText({
+      model: google('gemini-1.5-flash'),
+      prompt: prompt,
+    });
+
+    // Parse the AI response
+    try {
+      // Clean the response by removing markdown code blocks if present
+      let cleanedText = text.trim();
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      const aiResult = JSON.parse(cleanedText);
+      
+      // Validate the result structure
+      if (typeof aiResult.score === 'number' && 
+          Array.isArray(aiResult.issues) && 
+          Array.isArray(aiResult.recommendations) &&
+          Array.isArray(aiResult.relevantKeywords) &&
+          Array.isArray(aiResult.missingKeywords)) {
+        return {
+          score: Math.max(0, Math.min(100, aiResult.score)),
+          issues: aiResult.issues.slice(0, 3),
+          recommendations: aiResult.recommendations.slice(0, 3),
+          relevantKeywords: aiResult.relevantKeywords,
+          missingKeywords: aiResult.missingKeywords
+        };
+      } else {
+        throw new Error('Invalid AI response structure');
+      }
+    } catch (parseError) {
+      console.warn("Failed to parse AI job keyword analysis response:", parseError);
+      console.warn("Raw AI response:", text);
+      return null;
+    }
+  } catch (error) {
+    console.error("AI Job Keyword Analysis Error:", error);
+    return null;
   }
 }
