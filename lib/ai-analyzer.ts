@@ -83,11 +83,19 @@ export function checkPuterStatus(): string {
   const puter = typeof window !== 'undefined' ? (window as Window).puter : undefined;
   
   if (!puter) {
-    return `❌ Puter.js not loaded\n💡 Solutions:\n• Make sure you're running on Puter.com\n• Check browser console for script loading errors\n• Refresh the page and wait for Puter.js to load`
+    return `❌ Puter.js not loaded
+💡 Solutions:
+• Make sure you're running on Puter.com
+• Check browser console for script loading errors
+• Refresh the page and wait for Puter.js to load`
   }
   
   if (!puter.ai) {
-    return `⚠️ Puter.js loaded but AI module not available\n💡 Solutions:\n• Wait a moment for AI module to initialize\n• Check your Puter.com account permissions\n• Try logging out and back in to Puter.com`
+    return `⚠️ Puter.js loaded but AI module not available
+💡 Solutions:
+• Wait a moment for AI module to initialize
+• Check your Puter.com account permissions
+• Try logging out and back in to Puter.com`
   }
   
   if (typeof puter.ai.chat !== 'function') {
@@ -255,7 +263,7 @@ export async function geminiChat(prompt: string): Promise<string> {
     
     // Generate text using the Gemini model directly
     const { text } = await generateText({
-      model: google('gemini-1.5-flash'),
+      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
       prompt: prompt,
     });
     
@@ -778,7 +786,12 @@ export async function safePuterQuickstart(prompt: string = "Tell me about space"
     if (error instanceof Error) {
       const message = error.message || 'Unknown error occurred'
       if (message.includes('Chat API error: {}')) {
-        return `❌ Empty Chat Error: Puter.js returned an empty error object. This usually indicates:\n• Network connectivity issues\n• Authentication problems (try logging in to Puter.com)\n• API service unavailability\n\nPlease refresh the page and try again.`
+        return `❌ Empty Chat Error: Puter.js returned an empty error object. This usually indicates:
+• Network connectivity issues
+• Authentication problems (try logging in to Puter.com)
+• API service unavailability
+
+Please refresh the page and try again.`
       }
       return `❌ Error: ${message}`
     }
@@ -955,7 +968,16 @@ export async function puterQuickstart(prompt: string = "Tell me about space"): P
         // Get more detailed diagnostic information
         const diagnostic = await diagnosticPuterConnection()
         
-        return `❌ Puter.js Chat API Error\n\n🔍 Diagnostic Information:\n${diagnostic}\n\n💡 Quick Solutions:\n• Try refreshing the page\n• Check your Puter.com login status\n• Ensure stable internet connection\n• Wait a moment and try again`
+        return `❌ Puter.js Chat API Error
+
+🔍 Diagnostic Information:
+${diagnostic}
+
+💡 Quick Solutions:
+• Try refreshing the page
+• Check your Puter.com login status
+• Ensure stable internet connection
+• Wait a moment and try again`
       }
       
       console.log("[AI Quickstart] Raw response:", response)
@@ -1189,7 +1211,7 @@ export async function analyzeJobKeywordsWithAI(cvText: string, jobDescription: s
 
     // Generate text using the Gemini model
     const { text } = await generateText({
-      model: google('gemini-1.5-flash'),
+      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
       prompt: prompt,
     });
 

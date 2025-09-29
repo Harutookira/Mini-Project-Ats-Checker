@@ -118,12 +118,12 @@ export async function POST(request: NextRequest) {
       4.  **REKOMENDASI PERBAIKAN** (3-5 saran yang bisa langsung diterapkan).
       5.  **KESIMPULAN SINGKAT**.
       
-      Gunakan format yang jelas dengan emoji untuk setiap bagian (📊 untuk Skor, 🎯 untuk Skor Total, ❌ untuk Masalah, ✅ untuk Rekomendasi, 💡 для Kesimpulan).`;
+      Gunakan format yang jelas dengan emoji untuk setiap bagian (📊 untuk Skor, 🎯 untuk Skor Total, ❌ untuk Masalah, ✅ untuk Rekomendasi, 💡 untuk Kesimpulan).`;
     }
 
     // Use the correct model from @ai-sdk/google
     const { text } = await generateText({
-      model: google('gemini-1.5-flash'),
+      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
       prompt: prompt,
     });
 
