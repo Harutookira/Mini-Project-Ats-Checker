@@ -267,7 +267,7 @@ export function calculateComprehensiveScore(
   }
 }
 
-// Generate ranking insights
+// Generate ranking insights with AI enhancement
 export function generateRankingInsights(score: ComprehensiveScore, industry: string): string[] {
   const insights: string[] = []
   const benchmark = INDUSTRY_BENCHMARKS[industry]
@@ -300,4 +300,106 @@ export function generateRankingInsights(score: ComprehensiveScore, industry: str
   }
 
   return insights
+}
+
+// AI-enhanced scoring with dynamic weights
+export function calculateAIEnhancedScore(
+  categoryScores: { parsing: number; keywords: number; content: number; format: number },
+  cvText: string,
+  aiInsights?: {
+    industryDetected: string
+    careerLevel: string
+    skillsGap: string[]
+    improvementPriority: string
+  }
+): ComprehensiveScore {
+  // Use AI-detected industry or fall back to detection
+  const industry = aiInsights?.industryDetected || detectIndustry(cvText)
+  const benchmark = INDUSTRY_BENCHMARKS[industry]
+
+  // Adjust weights based on AI insights
+  let adjustedWeights = { ...benchmark.weights }
+  
+  if (aiInsights?.careerLevel === "entry-level") {
+    // For entry-level, emphasize education and format
+    adjustedWeights.content += 0.05
+    adjustedWeights.format += 0.05
+    adjustedWeights.keywords -= 0.1
+  } else if (aiInsights?.careerLevel === "senior-level") {
+    // For senior-level, emphasize content and keywords
+    adjustedWeights.content += 0.1
+    adjustedWeights.keywords += 0.05
+    adjustedWeights.format -= 0.15
+  }
+
+  // Calculate weighted scores with adjusted weights
+  const breakdown: ScoreBreakdown[] = [
+    {
+      category: "CV Parsing",
+      rawScore: categoryScores.parsing,
+      weight: adjustedWeights.parsing,
+      weightedScore: categoryScores.parsing * adjustedWeights.parsing,
+      percentile: calculatePercentile(categoryScores.parsing, benchmark),
+      grade: calculateGrade(categoryScores.parsing),
+    },
+    {
+      category: "Keyword Matching",
+      rawScore: categoryScores.keywords,
+      weight: adjustedWeights.keywords,
+      weightedScore: categoryScores.keywords * adjustedWeights.keywords,
+      percentile: calculatePercentile(categoryScores.keywords, benchmark),
+      grade: calculateGrade(categoryScores.keywords),
+    },
+    {
+      category: "Content Quality",
+      rawScore: categoryScores.content,
+      weight: adjustedWeights.content,
+      weightedScore: categoryScores.content * adjustedWeights.content,
+      percentile: calculatePercentile(categoryScores.content, benchmark),
+      grade: calculateGrade(categoryScores.content),
+    },
+    {
+      category: "Format & Readability",
+      rawScore: categoryScores.format,
+      weight: adjustedWeights.format,
+      weightedScore: categoryScores.format * adjustedWeights.format,
+      percentile: calculatePercentile(categoryScores.format, benchmark),
+      grade: calculateGrade(categoryScores.format),
+    },
+  ]
+
+  // Calculate overall scores
+  const overallScore = Math.round(
+    (categoryScores.parsing + categoryScores.keywords + categoryScores.content + categoryScores.format) / 4,
+  )
+
+  const weightedScore = Math.round(breakdown.reduce((sum, item) => sum + item.weightedScore, 0))
+
+  const industryPercentile = calculatePercentile(weightedScore, benchmark)
+  const overallGrade = calculateGrade(weightedScore)
+
+  // Enhanced competitive analysis with AI insights
+  const vsAverageCandidate = weightedScore - benchmark.averageScore
+  const vsTopPercentile = weightedScore - benchmark.topPercentileScore
+  const marketPosition = calculateMarketPosition(industryPercentile)
+
+  // AI-enhanced improvement potential
+  let improvementPotential = Math.min(100 - weightedScore, 25)
+  if (aiInsights?.improvementPriority === "high") {
+    improvementPotential += 5 // Higher potential for high-priority improvements
+  }
+
+  return {
+    overallScore,
+    weightedScore,
+    industryPercentile: Math.round(industryPercentile),
+    overallGrade,
+    breakdown,
+    competitiveAnalysis: {
+      vsAverageCandidate: Math.round(vsAverageCandidate),
+      vsTopPercentile: Math.round(vsTopPercentile),
+      marketPosition,
+    },
+    improvementPotential: Math.round(improvementPotential),
+  }
 }

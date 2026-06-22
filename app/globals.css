@@ -1,16 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* Replaced @custom-variant with traditional dark mode approach */
+/* @custom-variant dark (&:is(.dark *)); */
 
 :root {
-  --background: #fefce8;
+  /* Changed background color from #fefce8 to white */
+  --background: #ffffff;
   --foreground: #333333;
   --card: #ffffff;
   --card-foreground: #333333;
   --popover: #ffffff;
   --popover-foreground: #333333;
-  --primary: #800000;
+  /* Updated to create a more vibrant gradient */
+  --primary-from: #2972b6;
+  --primary-to: #ed6c56;
   --primary-foreground: #ffffff;
   --secondary: #ffd700;
   --secondary-foreground: #333333;
@@ -23,15 +27,16 @@
   --border: #e5e7eb;
   --input: #ffffff;
   --ring: #ffd700;
-  --chart-1: #800000;
+  --chart-1: #2972b6;
   --chart-2: #ffd700;
   --chart-3: #333333;
-  --chart-4: #fefce8;
+  --chart-4: #ffffff;
   --chart-5: #f1f5f9;
   --radius: 0.5rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #333333;
-  --sidebar-primary: #800000;
+  --sidebar-primary-from: #2972b6;
+  --sidebar-primary-to: #ed6c56;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #ffd700;
   --sidebar-accent-foreground: #333333;
@@ -40,13 +45,16 @@
 }
 
 .dark {
-  --background: #1a0a0a;
-  --foreground: #fefce8;
+  /* Changed background color in dark mode as well */
+  --background: #000000;
+  --foreground: #ffffff;
   --card: #2a1515;
   --card-foreground: #fefce8;
   --popover: #2a1515;
   --popover-foreground: #fefce8;
-  --primary: #b91c1c;
+  /* Updated for dark mode as well */
+  --primary-from: #2972b6;
+  --primary-to: #ed6c56;
   --primary-foreground: #fefce8;
   --secondary: #ffd700;
   --secondary-foreground: #1a0a0a;
@@ -59,14 +67,15 @@
   --border: #3a2020;
   --input: #2a1515;
   --ring: #ffd700;
-  --chart-1: #b91c1c;
+  --chart-1: #2972b6;
   --chart-2: #ffd700;
   --chart-3: #fefce8;
   --chart-4: #3a2020;
   --chart-5: #2a1515;
   --sidebar: #2a1515;
   --sidebar-foreground: #fefce8;
-  --sidebar-primary: #b91c1c;
+  --sidebar-primary-from: #2972b6;
+  --sidebar-primary-to: #ed6c56;
   --sidebar-primary-foreground: #fefce8;
   --sidebar-accent: #ffd700;
   --sidebar-accent-foreground: #1a0a0a;
@@ -83,7 +92,9 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
+  /* Updated to use gradient colors */
+  --color-primary-from: var(--primary-from);
+  --color-primary-to: var(--primary-to);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -107,7 +118,8 @@
   --radius-xl: calc(var(--radius) + 4px);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-from: var(--sidebar-primary-from);
+  --color-sidebar-primary-to: var(--sidebar-primary-to);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -115,11 +127,29 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Custom gradient classes with more vibrant styling */
+.bg-primary {
+  background: linear-gradient(90deg, var(--primary-from), var(--primary-to));
+}
+
+.text-primary {
+  color: var(--primary-from);
+}
+
+.border-primary {
+  border-color: var(--primary-from);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
+    @apply bg-background text-foreground;
+  }
+  
+  /* Added traditional dark mode support */
+  .dark body {
     @apply bg-background text-foreground;
   }
 }
