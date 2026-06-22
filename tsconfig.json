@@ -21,8 +21,6 @@
     "paths": {
       "@/*": ["./*"]
     },
-    // Fix for canvas type conflicts
-    "types": ["node"],
     // Include custom type declarations
     "typeRoots": ["./types", "./node_modules/@types"]
   },
