@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     // Use the correct model from @ai-sdk/google
     const { text } = await generateText({
-      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
+      model: google('gemini-2.0-flash'), // Use the stable model identifier
       prompt: prompt,
     });
 

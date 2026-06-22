@@ -263,7 +263,7 @@ export async function geminiChat(prompt: string): Promise<string> {
     
     // Generate text using the Gemini model directly
     const { text } = await generateText({
-      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
+      model: google('gemini-2.0-flash'), // Use the stable model identifier
       prompt: prompt,
     });
     
@@ -1211,7 +1211,7 @@ export async function analyzeJobKeywordsWithAI(cvText: string, jobDescription: s
 
     // Generate text using the Gemini model
     const { text } = await generateText({
-      model: google('gemini-2.0-flash-exp'), // Use the working model identifier
+      model: google('gemini-2.0-flash'), // Use the stable model identifier
       prompt: prompt,
     });
 
